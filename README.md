@@ -13,6 +13,11 @@ By Savannah L. Ferretti <sup>1</sup>, Tom Beucler <sup>2</sup>, Michael S. Pritc
 
 **Status:** This manuscript is currently in preparation and will be submitted to the [15th International Conference on Climate Informatics](https://wp.unil.ch/ci26/). Accepted submisisons are automatically forwarded for peer-review at *Environmental Data Science*. We welcome any comments, questions, or suggestions. Please email your feedback to Savannah Ferretti (savannah.ferretti@uci.edu).
 
+**Key Points**:
+- Point 1
+- Point 2
+- Point 3
+  
 **Abstract**: Insert abstract text here.
 
 Project Organization
