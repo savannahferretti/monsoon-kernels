@@ -1,7 +1,7 @@
 Data-Driven Integration Kernels for the Interpretable Machine Learning of Nonlocal Processes
 ------------
 
-By Savannah L. Ferretti sup>1</sup>, Tom Beucler <sup>2</sup>, Michael S. Pritchard<sup>3</sup>, & Jane W. Baldwin<sup>1,4</sup>
+By Savannah L. Ferretti <sup>1</sup>, Tom Beucler <sup>2</sup>, Michael S. Pritchard<sup>3</sup>, & Jane W. Baldwin<sup>1,4</sup>
 
 <sup>1</sup>Department of Earth System Science, University of California, Irvine, Irvine, CA, USA 
 
