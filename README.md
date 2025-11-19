@@ -5,7 +5,7 @@ By Savannah L. Ferretti <sup>1</sup>, Tom Beucler <sup>2</sup>, Michael S. Pritc
 
 <sup>1</sup>Department of Earth System Science, University of California, Irvine, Irvine, CA, USA 
 
-<sup>2</sup>Faculty of Geosciences and Envionment, University of Lausanne, Lausanne, VD, CH
+<sup>2</sup>Faculty of Geosciences and Environment, University of Lausanne, Lausanne, VD, CH
 
 <sup>3</sup>NVIDIA Corporation, Sanata Clara, CA, USA
 
