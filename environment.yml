@@ -1,0 +1,11 @@
+# Cross-platform compatible: conda env export --from-history>environment.yml
+# Platform and package-specific: conda env export ENVNAME>environment.yml
+# Platform, package, and channel-specific: conda list --explicit>environment.txt
+name:
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip:
+    - 

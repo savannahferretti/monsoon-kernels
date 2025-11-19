@@ -1,0 +1,91 @@
+__pycache__/                # Python bytecode cache directories
+*.py[cod]                   # Compiled Python files (.pyc, .pyo, .pyd)
+*$py.class                  # Python class files
+*.so                        # Shared object files from C extensions
+.Python                     # Python executable symlink
+build/                      # Build artifacts directory
+develop-eggs/               # Development eggs directory
+dist/                       # Distribution packages
+downloads/                  # Downloaded packages
+eggs/                       # Egg packages
+.eggs/                      # Egg info directory
+lib/                        # Library directory
+lib64/                      # 64-bit library directory
+parts/                      # Buildout parts
+sdist/                      # Source distribution
+var/                        # Variable data
+wheels/                     # Wheel packages
+pip-wheel-metadata/         # Pip wheel metadata
+share/python-wheels/        # Shared Python wheels
+*.egg-info/                 # Egg metadata directories
+.installed.cfg              # Installation configuration
+*.egg                       # Egg packages
+MANIFEST                    # Manifest file
+*.manifest                  # PyInstaller manifest files
+*.spec                      # PyInstaller spec files
+htmlcov/                    # HTML coverage reports
+.tox/                       # Tox testing environments
+.nox/                       # Nox testing environments
+.coverage                   # Coverage data file
+.coverage.*                 # Coverage data files with suffixes
+.cache                      # Pytest cache
+nosetests.xml               # Nose test results
+coverage.xml                # Coverage XML reports
+*.cover                     # Coverage files
+*.py,cover                  # Coverage files with Python suffix
+.hypothesis/                # Hypothesis testing data
+.pytest_cache/              # Pytest cache directory
+.ipynb_checkpoints/         # Jupyter notebook checkpoint files
+*/.ipynb_checkpoints/*      # Checkpoint files in any subdirectory
+*.nc                        # NetCDF files (climate/weather data)
+*.hdf5                      # HDF5 data files
+*.h5                        # HDF5 data files (alternative extension)
+*.csv                       # CSV data files (comment out if you want to track small CSVs)
+*.parquet                   # Parquet data files
+*.pkl                       # Pickle files
+*.pickle                    # Pickle files (alternative extension)
+*.joblib                    # Joblib serialized files
+*.pth                       # PyTorch model files
+*.pt                        # PyTorch tensor files
+*.ckpt                      # Model checkpoint files
+*.model                     # Generic model files
+*.weights                   # Model weight files
+*.log                       # Log files
+*.out                       # Output files
+*.err                       # Error files
+logs/                       # Log directories
+*.log.*                     # Rotated log files
+env/                        # Virtual environment directory
+venv/                       # Virtual environment directory
+ENV/                        # Environment directory
+env.bak/                    # Environment backup
+venv.bak/                   # Virtual environment backup
+.env                        # Environment variables file
+.venv                       # Virtual environment directory
+.idea/                      # PyCharm IDE files
+.vscode/                    # Visual Studio Code settings
+.spyproject/                # Spyder project files
+*.swp                       # Vim swap files
+*.swo                       # Vim swap files
+*~                          # Temporary files created by editors
+.DS_Store                   # macOS filesystem metadata
+.DS_Store?                  # macOS filesystem metadata variant
+._*                         # macOS resource forks
+.Spotlight-V100             # macOS Spotlight index
+.Trashes                    # macOS trash folder
+ehthumbs.db                 # Windows thumbnail cache
+Thumbs.db                   # Windows thumbnail cache
+Desktop.ini                 # Windows desktop configuration
+docs/_build/                # Sphinx documentation build directory
+site/                       # MkDocs site directory
+*.db                        # SQLite database files
+*.sqlite                    # SQLite database files
+*.sqlite3                   # SQLite database files
+*.tmp                       # Temporary files
+*.temp                      # Temporary files
+.cache/                     # Cache directories
+.mypy_cache/                # MyPy type checker cache
+.dmypy.json                 # MyPy daemon configuration
+dmypy.json                  # MyPy daemon configuration
+*.mo                        # Compiled translation files
+*.pot                       # Translation template files
