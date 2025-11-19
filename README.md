@@ -3,13 +3,10 @@ Data-Driven Integration Kernels for the Interpretable Machine Learning of Nonloc
 
 By Savannah L. Ferretti <sup>1</sup>, Tom Beucler <sup>2</sup>, Michael S. Pritchard<sup>3</sup>, & Jane W. Baldwin<sup>1,4</sup>
 
-<sup>1</sup>Department of Earth System Science, University of California, Irvine, Irvine, CA, USA 
-
-<sup>2</sup>Faculty of Geosciences and Environment, University of Lausanne, Lausanne, VD, CH
-
-<sup>3</sup>NVIDIA Corporation, Sanata Clara, CA, USA
-
-<sup>4</sup>Lamont-Doherty Earth Observatory, Columbia University, Palisades, NY, USA
+<sup>1</sup>Department of Earth System Science, University of California, Irvine, Irvine, CA, USA  
+<sup>2</sup>Faculty of Geosciences and Environment, University of Lausanne, Lausanne, VD, CH  
+<sup>3</sup>NVIDIA Corporation, Sanata Clara, CA, USA  
+<sup>4</sup>Lamont-Doherty Earth Observatory, Columbia University, Palisades, NY, USA  
 
 **Status:** This manuscript is currently in preparation and will be submitted to the [15th International Conference on Climate Informatics](https://wp.unil.ch/ci26/). Accepted submisisons are automatically forwarded for peer-review at *Environmental Data Science*. We welcome any comments, questions, or suggestions. Please email your feedback to Savannah Ferretti (savannah.ferretti@uci.edu).
 
