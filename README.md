@@ -1,13 +1,17 @@
-Paper Title
+Data-Driven Integration Kernels for the Interpretable Machine Learning of Nonlocal Processes
 ------------
 
-By A. A. Author<sup>1</sup>, B. B. Author<sup>1</sup>, & C. C. Author<sup>2</sup>
+By Savannah L. Ferretti sup>1</sup>, Tom Beucler <sup>2</sup>, Michael S. Pritchard<sup>3</sup>, & Jane W. Baldwin<sup>1,4</sup>
 
-<sup>1</sup>Department, Organization, City, State, Country
+<sup>1</sup>Department of Earth System Science, University of California, Irvine, Irvine, CA, USA 
 
-<sup>2</sup>Department, Organization, City, State, Country
+<sup>2</sup>Faculty of Geosciences and Envionment, University of Lausanne, Lausanne, VD, CH
 
-**Status:** This manuscript has been submitted for publication at ```<JOURNAL>```. The ```<PAPER>``` was published in ```<JOURNAL>``` in ```<MONTH, YEAR>```. ```<SUPPORTING_INFORMATION>``` is also available.  We welcome any comments, questions, or suggestions. Please email your feedback to ```<MAIN_AUTHOR>``` (```<EMAIL>```).
+<sup>3</sup>NVIDIA Corporation, Sanata Clara, CA, USA
+
+<sup>4</sup>Lamont-Doherty Earth Observatory, Columbia University, Palisades, NY, USA
+
+**Status:** This manuscript is currently in preparation and will be submitted to the [Climate Infomratics 2026](https://wp.unil.ch/ci26/) conference. Accepted submisisons are automatically forwarded for peer-review at \textit{Envionmental Data Science}. We welcome any comments, questions, or suggestions. Please email your feedback to Savannah Ferretti (savannah.ferretti@uci.edu).
 
 **Abstract**: Insert abstract text here.
 
@@ -35,7 +39,7 @@ Project Organization
 
 Acknowledgements
 -------
-The analysis for this work has been performed on ```<HPC>```. This research was funded by ```<GRANTOR>```.```<NAME>``` provided helpful feedback on the first draft. Thanks to our colleagues at ```<ORGANIZATION>``` for their continued support.
+The analysis for this work has been performed on NERSC's [Perlmutter](https://docs.nersc.gov/systems/perlmutter/architecture/). This research was funded by ```<GRANTOR>```.```<NAME>``` provided helpful feedback on the first draft. Thanks to our colleagues at ```<ORGANIZATION>``` for their continued support.
 
 --------
 <p><small>This template is based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>.</small></p>
