@@ -1,11 +1,32 @@
-# Cross-platform compatible: conda env export --from-history>environment.yml
-# Platform and package-specific: conda env export ENVNAME>environment.yml
-# Platform, package, and channel-specific: conda list --explicit>environment.txt
-name:
+name: monsoon-kernels
 channels:
   - conda-forge
-  - defaults
 dependencies:
-  - python=3.9
-  - pip:
-    - 
+  - adlfs
+  - basemap
+  - bottleneck
+  - cartopy
+  - dask
+  - fsspec
+  - gcsfs
+  - h5py
+  - ipykernel
+  - julia
+  - matplotlib
+  - netcdf4
+  - numba
+  - numpy
+  - pandas
+  - planetary-computer
+  - proplot
+  - pysr
+  - pystac-client
+  - python=3.10
+  - pytorch
+  - scikit-learn
+  - scipy
+  - sympy
+  - wandb
+  - xarray
+  - xesmf
+  - zarr
