@@ -25,19 +25,26 @@ Project Organization
 ```
 ├── LICENSE.md         <- License for code
 │
-├── README.md          <- Top-level information on this code base
+├── README.md          <- Top-level information on this code base/manuscript
 │
 ├── data/
-│   ├── external/      <- Data from third party sources
+│   ├── raw/           <- Original ERA5 and IMERG V06 data
 │   ├── interim/       <- Intermediate data that has been transformed
-│   ├── processed/     <- Final analysis-ready data
-│   └── raw/           <- Original immutable data
+│   ├── splits/        <- Training, validation, and test sets
+│   └── results/       <- Model predictions (and skill metrics)
 │
 ├── figs/              <- Generated figures/graphics 
 │
-├── notebooks/         <- Jupyter notebooks for data analysis/visualizations
+├── models/            
+│   ├── nn/            <- Saved NN models
+│   └── sr/            <- Saved PySR models
+|
+├── notebooks/         <- Jupyter notebooks for data analysis and visualizations
 │
-├── scripts/           <- Source code for use in this project     
+├── scripts/           
+│   ├── data/          <- Scripts for downloading, and calculating input/target terms, and splitting data
+│   ├── nn/            <- Scripts for training/evaluating baseline NNs, non-parametric kernel NNs, and parametric kernel NNs
+│   └── sr/            <- Scripts for running PySR and summarizing discovered equations 
 │
 └── environment.yml    <- File for reproducing the analysis environment
 ```
