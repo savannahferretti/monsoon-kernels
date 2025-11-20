@@ -48,6 +48,17 @@ def create_p_array(refda):
     p = refda.lev.expand_dims({'time':refda.time,'lat':refda.lat,'lon':refda.lon}).transpose('lev','time','lat','lon')
     return p
 
+def create_level_mask(refda,ps):
+    '''
+    Purpose: Create a below-surface level mask; 1 where levels exist (lev ≤ ps), else 0.
+    - refda (xr.DataArray): reference DataArray containing 'lev'
+    - ps (xr.DataArray): surface pressure (hPa)
+    Returns:
+    - xr.DataArray: DataArray of 0's (invalid levels) or 1's (valid levels)
+    '''
+    levmask = (refda.lev<=ps).transpose('time','lat','lon','lev').astype('uint8')
+    return levmask
+
 def resample(da):
     '''
     Purpose: Compute a centered hourly mean (uses the two half-hour samples that straddle each hour; falls back to 
@@ -213,6 +224,8 @@ if __name__=='__main__':
     ps  = regrid(ps).load()
     t   = regrid(t).load()
     q   = regrid(q).load()
+    logger.info('Creating below-surface level mask...')
+    levmask = create_level_mask(t,ps)
     logger.info('Calculating relative humidity and equivalent potential temperature terms...')
     p          = create_p_array(q)
     rh         = calc_rh(p,t,q)
@@ -228,7 +241,8 @@ if __name__=='__main__':
         dataset(rh,'rh','Relative humidity','%'),
         dataset(thetae,'thetae','Equivalent potential temperature','K'),
         dataset(thetaestar,'thetaestar','Saturated equivalent potential temperature','K'),
-        dataset(thetaeplus,'thetaeplus','Difference between saturated and unsaturated equivalent potential temperature','K')]
+        dataset(thetaeplus,'thetaeplus','Difference between saturated and unsaturated equivalent potential temperature','K'),
+        dataset(levmask,'levmask','Below-surface level mask','N/A'),]
     logger.info('Saving datasets...')
     for ds in dslist:
         save(ds)

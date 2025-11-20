@@ -1,0 +1,18 @@
+{
+  "paths":{
+    "filedir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits",
+    "modeldir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/models/nn",
+    "resultsdir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/results"},
+  "params":{
+    "targetvar":"pr",
+    "epochs":30,
+    "batchsize":2208,
+    "learningrate":0.001,
+    "patience":5},
+  "runs":[
+    {"run_name":"mse_sdo_t","input_vars":["sdo","t"],"description":"$\\sigma_{orog}$ + $T$"},
+    {"run_name":"mse_sdo_q","input_vars":["sdo","q"],"description":"$\\sigma_{orog}$ + $q$"},
+    {"run_name":"mse_sdo_rh","input_vars":["sdo","rh"],"description":"$\\sigma_{orog}$ + RH"},
+    {"run_name":"mse_sdo_thetae","input_vars":["sdo","thetae"],"description":"$\\sigma_{orog}$ + $\\theta_e$"},
+    {"run_name":"mse_sdo_thetaestar","input_vars":["sdo","thetaestar"],"description":"$\\sigma_{orog}$ + $\\theta_e^*$"},
+    {"run_name":"mse_sdo_thetaeplus","input_vars":["sdo","thetaeplus"],"description":"$\\sigma_{orog}$ + $\\theta_e^+$"}]}
