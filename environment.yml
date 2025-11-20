@@ -2,6 +2,7 @@ name: monsoon-kernels
 channels:
   - conda-forge
 dependencies:
+  - python=3.9.12
   - adlfs
   - basemap
   - bottleneck
@@ -10,6 +11,7 @@ dependencies:
   - fsspec
   - gcsfs
   - h5py
+  - h5netcdf
   - ipykernel
   - julia
   - matplotlib
@@ -21,7 +23,6 @@ dependencies:
   - proplot
   - pysr
   - pystac-client
-  - python=3.10
   - pytorch
   - scikit-learn
   - scipy
