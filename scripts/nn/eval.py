@@ -140,9 +140,9 @@ def predict(model,X,ytemplate,batchsize=BATCHSIZE,device=DEVICE):
 
 def save(ypred,runname,splitname,resultsdir=RESULTSDIR):
     '''
-    Purpose: Save an xr.DataArray of predicted precipitation (or derived ensemble statistic) to a NetCDF file, then verify the write by reopening.
+    Purpose: Save an xr.Dataset of an ensemble of predicted precipitation to a NetCDF file, then verify the write by reopening.
     Args:
-    - ypred (xr.DataArray): 3D DataArray of predicted precipitation or an ensemble statistic
+    - ypred (xr.Dataset): Dataset of predicted precipitation with a 'member' dimension
     - runname (str): model run name (or run name plus suffix indicating statistic)
     - splitname (str): evaluated split label
     - resultsdir (str): output directory (defaults to RESULTSDIR)
