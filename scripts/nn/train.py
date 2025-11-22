@@ -76,7 +76,7 @@ def load(splitname,inputvars,targetvar=TARGETVAR,filedir=FILEDIR):
 def fit(model,runname,Xtrain,Xvalid,ytrain,yvalid,criterion=CRITERION,batchsize=BATCHSIZE,device=DEVICE,learningrate=LEARNINGRATE,
         patience=PATIENCE,epochs=EPOCHS):
     '''
-    Purpose: Train a NN model with early stopping and learning rate scheduling.
+    Purpose: Train a NN model with early stopping and learning rate scheduling, then save only the top-N models.
     Args:
     - model (NNModel): initialized model instance
     - runname (str): model run name
@@ -91,7 +91,7 @@ def fit(model,runname,Xtrain,Xvalid,ytrain,yvalid,criterion=CRITERION,batchsize=
     - patience (int): number of epochs to wait without validation loss improvement before early stopping (defaults to PATIENCE)
     - epochs (int): maximum number of training epochs (defaults to EPOCHS)
     Returns:
-    - None: trains in-place and saves the best model checkpoint
+    - None: trains in-place and saves only the top-N model checkpoints
     '''
     traindataset = TensorDataset(Xtrain,ytrain)
     validdataset = TensorDataset(Xvalid,yvalid)
@@ -99,22 +99,23 @@ def fit(model,runname,Xtrain,Xvalid,ytrain,yvalid,criterion=CRITERION,batchsize=
     validloader  = DataLoader(validdataset,batch_size=batchsize,shuffle=False,num_workers=8,persistent_workers=True,pin_memory=True)
     model     = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(),lr=learningrate)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,max_lr=1e-3,epochs=epochs,steps_per_epoch=len(trainloader),pct_start=0.1,anneal_strategy='cos')
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,max_lr=1e-3,epochs=epochs,steps_per_epoch=len(trainloader),pct_start=0.1,anneal_strategy='cos')
     wandb.init(
-        project='Chapter 2',
+        project='Chapter 2 Experiments',
         name=runname,
         config={
             'Epochs':epochs,
             'Batch size':batchsize,
             'Initial learning rate':learningrate,
             'Early stopping patience':patience,
-            'Loss fucntion':'MSE'})
+            'Loss function':'MSE'})
     ntopmodels = 4
-    bestmodels = []
+    bestmodels = [] 
     bestloss   = float('inf')
     bestepoch  = 0
     noimprove  = 0
-    starttime = time.time()
+    starttime  = time.time()
     for epoch in range(1,epochs+1):
         model.train()
         runningloss = 0.0
@@ -138,10 +139,11 @@ def fit(model,runname,Xtrain,Xvalid,ytrain,yvalid,criterion=CRITERION,batchsize=
                 runningloss += loss.item()*Xbatch.size(0)
         validloss = runningloss/len(validloader.dataset)
         if len(bestmodels)<ntopmodels or validloss<max(m['loss'] for m in bestmodels):
-            save(model.state_dict(),runname,epoch)
+            statecpu = {key:value.detach().cpu().clone() for key,value in model.state_dict().items()}
             bestmodels.append({
                 'epoch':epoch,
-                'loss':validloss})
+                'loss':validloss,
+                'state':statecpu})
             bestmodels = sorted(bestmodels,key=lambda m:m['loss'])[:ntopmodels]
         if validloss<bestloss:
             bestloss  = validloss
@@ -156,6 +158,10 @@ def fit(model,runname,Xtrain,Xvalid,ytrain,yvalid,criterion=CRITERION,batchsize=
             'Learning rate':optimizer.param_groups[0]['lr']})
         if noimprove>=patience:
             break
+    bestmodels = sorted(bestmodels,key=lambda m:m['loss'])
+    logger.info(f'Saving top {len(bestmodels)} checkpoints for run {runname}...')
+    for m in bestmodels:
+        save(m['state'],runname,m['epoch'])
     duration = time.time()-starttime
     wandb.run.summary.update({
         'Best model at epoch':bestepoch,

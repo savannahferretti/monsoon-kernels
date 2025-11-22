@@ -10,8 +10,8 @@
     "learningrate":0.001,
     "patience":5},
   "runs":[
-    {"run_name":"mse_sdo_t","input_vars":["sdo","t"],"description":"$\\sigma_{orog}$ + $T$"},
-    {"run_name":"mse_sdo_q","input_vars":["sdo","q"],"description":"$\\sigma_{orog}$ + $q$"},
+    {"run_name":"mse_sdo_t","input_vars":["sdo","t"],"description":"$\\sigma_{orog}$ + $\\mathit{T}$"},
+    {"run_name":"mse_sdo_q","input_vars":["sdo","q"],"description":"$\\sigma_{orog}$ + $\\mathit{q}$"},
     {"run_name":"mse_sdo_rh","input_vars":["sdo","rh"],"description":"$\\sigma_{orog}$ + RH"},
     {"run_name":"mse_sdo_thetae","input_vars":["sdo","thetae"],"description":"$\\sigma_{orog}$ + $\\mathit{\\theta_{e}}$"},
     {"run_name":"mse_sdo_thetaestar","input_vars":["sdo","thetaestar"],"description":"$\\sigma_{orog}$ + $\\mathit{\\theta_{e}^*}$"},

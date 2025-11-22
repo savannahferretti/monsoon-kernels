@@ -74,7 +74,7 @@ def get_checkpoints(runname,modeldir=MODELDIR):
     Returns:
     - list[str]: list of checkpoint filepaths matching the run name
     '''
-    pattern     = os.path.join(modeldir,f'nn_{runname}_*.pth')
+    pattern     = os.path.join(modeldir,f'nn_{runname}_[0-9][0-9].pth')
     checkpoints = sorted(glob.glob(pattern))
     return checkpoints
 
@@ -108,7 +108,7 @@ def denormalize(ynormflat,targetvar=TARGETVAR,filedir=FILEDIR):
     mean = float(stats[f'{targetvar}_mean'])
     std  = float(stats[f'{targetvar}_std'])
     ylog = ynormflat*std+mean
-    y = np.exp1m(ylog)
+    y = np.expm1(ylog)
     return y
 
 def predict(model,X,ytemplate,batchsize=BATCHSIZE,device=DEVICE):
@@ -152,15 +152,15 @@ def save(ypred,runname,splitname,resultsdir=RESULTSDIR):
     os.makedirs(resultsdir,exist_ok=True)
     filename = f'nn_{runname}_{splitname}_pr.nc'
     filepath = os.path.join(resultsdir,filename)
-    logger.info(f'   Attempting to save {filename}...')
+    logger.info(f'      Attempting to save {filename}...')
     try:
         ypred.to_netcdf(filepath,engine='h5netcdf')
         with xr.open_dataset(filepath,engine='h5netcdf') as _:
             pass
-        logger.info('      File write successful')
+        logger.info('         File write successful')
         return True
     except Exception:
-        logger.exception('      Failed to save or verify')
+        logger.exception('         Failed to save or verify')
         return False
 
 if __name__=='__main__':
@@ -185,5 +185,5 @@ if __name__=='__main__':
         ensemble = ensemble.assign_coords(member=np.arange(len(memberpreds)))
         ensemble.name = 'pr'
         ensemble.attrs = dict(long_name='Ensemble NN-predicted precipitation rate',units='mm/hr')
-        save(ensemble,f'{runname}_ensemble',args.split)
+        save(ensemble,runname,args.split)
         del X,ytemplate,memberpreds,ensemble
