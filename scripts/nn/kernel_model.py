@@ -36,7 +36,7 @@ class VerticalKernelLayer(torch.nn.Module):
         '''
         Purpose: Define a non-parametric vertical integration kernel with one learned weight per level.
         Args:
-        - nlevels (int): number of vertical levels the 4D variable is given on
+        - nlevels (int): number of vertical levels in the 4D variable profile
         '''
         self.weights = torch.nn.Parameter(torch.zeros(nlevels))
 
@@ -98,7 +98,7 @@ class KernelNNModel(torch.nn.Module):
         which is concatenated with the scalar features and passed into the NN.
         Args:
         - nscalarfeatures (int): number of scalar input features (3D variables) per sample
-        - nlevels (int): number of vertical levels the 4D variable is given on
+        - nlevels (int): number of vertical levels in the 4D variable profile
         - kerneltype (str): 'vertical' | 'gaussian'
         - levels (np.ndarray or None): 1D array of pressure levels (hPa); required if kerneltype is 'gaussian', otherwise ignored
         '''
@@ -120,7 +120,7 @@ class KernelNNModel(torch.nn.Module):
         Purpose: Split the input into scalar features and vertical profiles, apply the vertical kernel to 
                  compress the profile to one scalar, then concatenate and pass through the main NN.
         Args:
-        - X (torch.Tensor): input tensor of shape (nsamples,nscalarfeatures+nlevels)
+        - X (torch.Tensor): input tensor of shape (nsamples, nscalarfeatures+nlevels)
         Returns:
         - torch.Tensor: raw prediction tensor of shape (nsamples, 1)
         '''
