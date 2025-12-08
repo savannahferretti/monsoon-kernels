@@ -6,18 +6,20 @@ import logging
 import warnings
 import numpy as np
 import xarray as xr
+from utils import Config
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
-AUTHOR   = 'Savannah L. Ferretti'      
-EMAIL    = 'savannah.ferretti@uci.edu' 
-FILEDIR  = '/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/raw'
-SAVEDIR  = '/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/interim'
-LATRANGE = (5.0,25.0) 
-LONRANGE = (60.0,90.0)
+config = Config()
+AUTHOR   = config.author
+EMAIL    = config.email
+FILEDIR  = config.rawdir
+SAVEDIR  = config.interimdir
+LATRANGE = config.latrange
+LONRANGE = config.lonrange
 
 def retrieve(longname,filedir=FILEDIR):
     '''
@@ -148,6 +150,43 @@ def calc_thetae(p,t,q=None):
     thetae = t*(p0/p)**(0.2854*(1.0-0.28*r))*np.exp((3.376/tl-0.00254)*1000.0*r*(1.0+0.81*r))
     return thetae
 
+def calc_quadrature_weights(refda,rearth=6.371e6):
+    '''
+    Purpose: Compute ΔA Δp Δt quadrature weights for a 4D grid (lat, lon, lev, time). These weights ensure that 
+    a sum over grid points approximates a physical integral over space and time.
+    Args:
+    - refda (xr.DataArray): reference DataArray containing 'lat', 'lon', 'lev', and 'time' coordinates
+    - rearth (float): Earth's radius in meters (defaults to 6,371,000)
+    Returns:
+    - xr.DataArray: quadrature weights with dims ('lat', 'lon', 'lev', 'time')
+    '''
+    def spacing(coord):
+        '''
+        Purpose: Estimate spacing between neighboring coordinate points using centered differences in the interior 
+        and one-sided differences at the boundaries.
+        Args:
+        - coord (np.ndarray): 1D array of monotonically increasing coordinate values
+        Returns:
+        - np.ndarray: 1D array of estimated spacing between grid points with the same length as 'coord'
+        '''
+        spacing = np.empty_like(coord)
+        spacing[1:-1] = 0.5*(coord[2:]-coord[:-2])
+        spacing[0]    = coord[1]-coord[0]
+        spacing[-1]   = coord[-1]-coord[-2]
+        return np.abs(spacing)
+    lats  = refda.lat.values
+    lons  = refda.lon.values
+    levs  = refda.lev.values
+    times = np.arange(refda.time.size,dtype=np.float32)
+    dlat  = spacing(np.deg2rad(lats))
+    dlon  = spacing(np.deg2rad(lons))
+    dlev  = spacing(levs)
+    dtime = spacing(times)
+    area  = ((rearth**2)*np.cos(np.deg2rad(lats))*dlat).reshape(lats.size,1)*dlon.reshape(1,lons.size)
+    weights = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size)
+    weightsda = xr.DataArray(weights.astype(np.float32),dims=refda.dims,coords=refda.coords,name='quadweights')
+    return weightsda
+
 def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     '''
     Purpose: Wrap a standardized xr.DataArray into an xr.Dataset, preserving coordinates and setting 
@@ -210,7 +249,6 @@ def save(ds,timechunksize=2208,savedir=SAVEDIR):
     except Exception:
         logger.exception('      Failed to save or verify')
         return False
-        
 
 if __name__=='__main__':
     logger.info('Importing all raw variables...')
@@ -234,6 +272,8 @@ if __name__=='__main__':
     rh         = calc_rh(p,t,q)
     thetae     = calc_thetae(p,t,q)
     thetaestar = calc_thetae(p,t)
+    logger.info('Calculating quadrature weights...')
+    quadweights = calc_quadrature_weights(t)
     logger.info('Creating datasets...')
     dslist = [        
         dataset(t,'t','Air temperature','K'),
@@ -244,7 +284,8 @@ if __name__=='__main__':
         dataset(lf,'lf','Land fraction','0-1'),
         dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
         dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
-        dataset(pr,'pr','Precipitation rate','mm/hr')]
+        dataset(pr,'pr','Precipitation rate','mm/hr'),
+        dataset(quadweights,'quadweights','Quadrature integration weights','m² hPa hr')]
     logger.info('Saving datasets...')
     for ds in dslist:
         save(ds)

@@ -8,6 +8,7 @@ import logging
 import warnings
 import numpy as np
 import xarray as xr
+from utils import Config
 import planetary_computer
 from datetime import datetime
 import pystac_client as pystac
@@ -20,14 +21,15 @@ logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(m
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
-AUTHOR    = 'Savannah L. Ferretti'
-EMAIL     = 'savannah.ferretti@uci.edu'
-SAVEDIR   = '/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/raw'
-YEARS     = [2000,2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020]
-MONTHS    = [6,7,8]
-LATRANGE  = (5.0,25.0) 
-LONRANGE  = (60.0,90.0)
-LEVRANGE  = (500.0,1000.0)
+config = Config()
+AUTHOR   = config.author
+EMAIL    = config.email
+SAVEDIR  = config.rawdir
+YEARS    = config.years
+MONTHS   = config.months
+LATRANGE = config.latrange
+LONRANGE = config.lonrange
+LEVRANGE = config.levrange
 
 def retrieve_era5():
     '''
@@ -133,6 +135,14 @@ def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     '''    
     ds = da.to_dataset(name=shortname)
     ds[shortname].attrs = dict(long_name=longname,units=units)
+    if 'lat' in ds.coords:
+        ds.lat.attrs  = dict(long_name='Latitude',units='°N')
+    if 'lon' in ds.coords:
+        ds.lon.attrs  = dict(long_name='Longitude',units='°E')
+    if 'lev' in ds.coords:
+        ds.lev.attrs  = dict(long_name='Pressure level',units='hPa')
+    if 'time' in ds.coords:
+        ds.time.attrs = dict(long_name='Time')
     ds.attrs = dict(history=f'Created on {datetime.today().strftime("%Y-%m-%d")} by {author} ({email})')
     logger.info(f'   {longname} size: {ds.nbytes*1e-9:.3f} GB')
     return ds

@@ -6,19 +6,19 @@ import numpy as np
 import xarray as xr
 from torch.utils.data import Dataset
 
-
 def load(splitname,filedir):
     '''
     Purpose: Load a split as an xr.Dataset.
     Args:
     - splitname (str): 'train' | 'valid' | 'test'
     - filedir (str): directory containing split files
+    Returns:
+    - xr.Dataset: loaded split Dataset
     '''
     filename = f'{splitname}.h5'
     filepath = os.path.join(filedir,filename)
     ds = xr.open_dataset(filepath,engine='h5netcdf')
     return ds
-
 
 def tensors(ds,fieldvars,localvars,targetvar):
     '''
@@ -31,53 +31,43 @@ def tensors(ds,fieldvars,localvars,targetvar):
     Returns:
     - tuple[torch.Tensor,torch.Tensor | None,torch.Tensor]: field, (optional) local, and target tensors
     '''
-    # fields: (nfieldvars, nlats, nlons, nlevs, ntimes)
     fieldlist = []
     for varname in fieldvars:
         da  = ds[varname].transpose('lat','lon','lev','time')
         arr = da.values.astype(np.float32)
         fieldlist.append(arr)
     fielddata = torch.from_numpy(np.stack(fieldlist,axis=0))
-
-    # locals: (nlocalvars, nlats, nlons, ntimes) or None
     if localvars:
         locallist = []
-        ntimes = ds[targetvar].sizes['time']
+        ntimes = ds.time.size
         for varname in localvars:
             da = ds[varname]
             if 'time' in da.dims:
                 arr = da.transpose('lat','lon','time').values.astype(np.float32)
             else:
                 arr2d = da.transpose('lat','lon').values.astype(np.float32)
-                arr   = np.broadcast_to(arr2d[...,None],
-                                        (arr2d.shape[0],arr2d.shape[1],ntimes)).astype(np.float32)
+                arr = np.broadcast_to(arr2d[...,None],(arr2d.shape[0],arr2d.shape[1],ntimes))
             locallist.append(arr)
         localdata = torch.from_numpy(np.stack(locallist,axis=0))
     else:
         localdata = None
-
-    # target: (nlats, nlons, ntimes)
-    targetdata = torch.from_numpy(
-        ds[targetvar].transpose('lat','lon','time').values.astype(np.float32))
-
+    targetdata = torch.from_numpy(ds[targetvar].transpose('lat','lon','time').values.astype(np.float32))
     return fielddata,localdata,targetdata
 
 
 class Patch:
     
-    def __init__(self,latradius,lonradius,maxlevs,timelag):
+    def __init__(self,radius,maxlevs,timelag):
         '''
         Purpose: Store patch configuration and infer patch shape/valid patch centers.
         Args:
-        - latradius (int): number of latitude grid points to include on each side of the center
-        - lonradius (int): number of longitude grid points to include on each side of the center
+        - radius (int): number of horizontal grid points to include on each side of the center
         - maxlevs (int): maximum number of vertical levels to include; if maxlevs ≥ total levels, use all levels
         - timelag (int): number of past time steps to include; if 0, use only the current time step (no time lag)
         '''
-        self.latradius = int(latradius)
-        self.lonradius = int(lonradius)
-        self.maxlevs   = int(maxlevs)
-        self.timelag   = int(timelag)
+        self.radius  = int(radius)
+        self.maxlevs = int(maxlevs)
+        self.timelag = int(timelag)
     
     def shape(self,nlevs):
         '''
@@ -87,8 +77,8 @@ class Patch:
         Returns:
         - tuple[int,int,int,int]: (plats, plons, plevs, ptimes)
         '''
-        plats  = 2*self.latradius+1
-        plons  = 2*self.lonradius+1
+        plats  = 2*self.radius+1
+        plons  = 2*self.radius+1
         plevs  = min(nlevs,self.maxlevs)
         ptimes = self.timelag+1 if self.timelag>0 else 1
         return (plats,plons,plevs,ptimes)
@@ -106,45 +96,33 @@ class Patch:
         Returns:
         - list[tuple[int,int,int]]: list of (latidx, lonidx, timeidx)
         '''
-        nlats,nlons,ntimes = targetdata.shape
-        lat_idx,lon_idx,time_idx = torch.nonzero(torch.isfinite(targetdata),as_tuple=True)
-
-        # patch must fit spatially inside halo grid
-        latrad,lonrad = self.latradius,self.lonradius
-        fit_mask = (
-            (lat_idx >= latrad) & (lat_idx < nlats-latrad) &
-            (lon_idx >= lonrad) & (lon_idx < nlons-lonrad)
-        )
-
-        # restrict to prediction domain
-        lat_vals = torch.as_tensor(lats,dtype=torch.float32)
-        lon_vals = torch.as_tensor(lons,dtype=torch.float32)
-        latmin,latmax = latrange
-        lonmin,lonmax = lonrange
-        dom_mask = (
-            (lat_vals[lat_idx] >= latmin) & (lat_vals[lat_idx] <= latmax) &
-            (lon_vals[lon_idx] >= lonmin) & (lon_vals[lon_idx] <= lonmax)
-        )
-
-        keep = fit_mask & dom_mask
-
-        lat_sel  = lat_idx[keep].tolist()
-        lon_sel  = lon_idx[keep].tolist()
-        time_sel = time_idx[keep].tolist()
-        return list(zip(lat_sel,lon_sel,time_sel))
+        nlats,nlons,ntimes    = targetdata.shape
+        latidx,lonidx,timeidx = torch.nonzero(torch.isfinite(targetdata),as_tuple=True)
+        lats = torch.as_tensor(lats,dtype=torch.float32)
+        lons = torch.as_tensor(lons,dtype=torch.float32)
+        fitmask    = ((latidx>=self.radius)&(latidx<nlats-self.radius)&
+                      (lonidx>=self.radius)&(lonidx<nlons-self.radius))
+        domainmask = ((lats[latidx]>=latrange[0])&(lats[latidx]<=latrange[1])&
+                      (lons[lonidx]>=lonrange[0])&(lons[lonidx]<=lonrange[1]))
+        keep = fitmask&domainmask
+        latidxkeep  = latidx[keep].tolist()
+        lonidxkeep  = lonidx[keep].tolist()
+        timeidxkeep = timeidx[keep].tolist()
+        return list(zip(latidxkeep,lonidxkeep,timeidxkeep))
 
 
 class SampleDataset(Dataset):
     
-    def __init__(self,fielddata,localdata,targetdata,centers,patch):
+    def __init__(self,fielddata,localdata,targetdata,centers,patch,uselocal):
         '''
-        Purpose: Return patches, optional local inputs, and target values for (lat, lon, time) samples.
+        Purpose: Return predictor field patches, optional local inputs, and target values for (lat, lon, time) samples.
         Args:
-        - fielddata (torch.Tensor): (nfieldvars, nlats, nlons, nlevs, ntimes)
-        - localdata (torch.Tensor | None): (nlocalvars, nlats, nlons, ntimes)
-        - targetdata (torch.Tensor): (nlats, nlons, ntimes)
+        - fielddata (torch.Tensor): with shape (nfieldvars, nlats, nlons, nlevs, ntimes)
+        - localdata (torch.Tensor | None): with shape (nlocalvars, nlats, nlons, ntimes)
+        - targetdata (torch.Tensor): with shape (nlats, nlons, ntimes)
         - centers (list[tuple[int,int,int]]): (latidx, lonidx, timeidx) patch centers
         - patch (Patch): patch configuration
+        - uselocal (bool): whether to include local inputs in samples
         '''
         super().__init__()
         if fielddata.ndim!=5:
@@ -158,55 +136,53 @@ class SampleDataset(Dataset):
         self.targetdata = targetdata
         self.centers    = list(centers)
         self.patch      = patch
+        self.uselocal   = uselocal
     
     def __len__(self):
+        '''
+        Purpose: Return the number of samples in the dataset.
+        Returns:
+        - int: number of samples
+        '''
         return len(self.centers)
 
     def __getitem__(self,idx):
+        '''
+        Purpose: Extract a single sample containing a predictor field patch, optional local inputs, and target value.
+        Args:
+        - idx (int): sample index
+        Returns:
+        - dict: sample with keys 'patch', 'target', and optionally 'local'
+        '''
         latidx,lonidx,timeidx      = self.centers[idx]
         _,nlats,nlons,nlevs,ntimes = self.fielddata.shape
-
-        latrad = self.patch.latradius
-        lonrad = self.patch.lonradius
-        maxlevs = min(nlevs,self.patch.maxlevs)
-        lag     = self.patch.timelag
-
-        latmin,latmax = latidx-latrad, latidx+latrad+1
-        lonmin,lonmax = lonidx-lonrad, lonidx+lonrad+1
-        levmin,levmax = 0, maxlevs
-
-        if lag>0:
-            timemin_raw = timeidx - lag
-            timemin     = max(0,timemin_raw)
-            timemax     = timeidx + 1
-            patch_len   = timemax - timemin
-            needed_len  = lag + 1
+        latmin,latmax = latidx-self.patch.radius,latidx+self.patch.radius+1
+        lonmin,lonmax = lonidx-self.patch.radius,lonidx+self.patch.radius+1
+        levmin,levmax = 0,min(nlevs,self.patch.maxlevs)
+        if self.patch.timelag>0:
+            timemin,timemax = max(0,timeidx-self.patch.timelag),timeidx+1
+            patchlength  = timemax-timemin
+            neededlength = self.patch.timelag+1
         else:
             timemin = timeidx
-            timemax = timeidx + 1
-            patch_len = needed_len = 1
-
-        patch_slice = self.fielddata[:,latmin:latmax,lonmin:lonmax,levmin:levmax,timemin:timemax]
-
-        # left-pad in time if we don't have enough history
-        if patch_len < needed_len:
-            pad_len = needed_len - patch_len
-            pad_shape = (
-                patch_slice.shape[0],
-                patch_slice.shape[1],
-                patch_slice.shape[2],
-                patch_slice.shape[3],
-                pad_len
-            )
-            pad   = torch.zeros(pad_shape,dtype=self.fielddata.dtype)
-            patch = torch.cat([pad,patch_slice],dim=-1)
+            timemax = timeidx+1
+            patchlength = neededlength = 1
+        patchslice = self.fielddata[:,latmin:latmax,lonmin:lonmax,levmin:levmax,timemin:timemax]
+        if patchlength<neededlength:
+            padlength = neededlength-patchlength
+            padshape  = (
+                patchslice.shape[0],
+                patchslice.shape[1],
+                patchslice.shape[2],
+                patchslice.shape[3],
+                padlength)
+            pad   = torch.zeros(padshape,dtype=self.fielddata.dtype)
+            patch = torch.cat([pad,patchslice],dim=-1)
         else:
-            patch = patch_slice
-
+            patch = patchslice
         sample = {
             'patch':patch,
-            'target':self.targetdata[latidx,lonidx,timeidx]
-        }
-        if self.localdata is not None:
+            'target':self.targetdata[latidx,lonidx,timeidx]}
+        if self.uselocal and self.localdata is not None:
             sample['local'] = self.localdata[:,latidx,lonidx,timeidx]
         return sample

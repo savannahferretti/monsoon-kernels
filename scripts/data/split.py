@@ -2,61 +2,45 @@
 
 import os
 import json
+import glob
 import h5py
 import logging
 import warnings
 import numpy as np
 import xarray as xr
+from utils import Config
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
-FILEDIR     = '/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/interim'
-SAVEDIR     = '/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits'
-FIELDVARS   = ['t','q','rh','thetae','thetaestar']
-LOCALVARS   = ['lf','lhf','shf']
-TARGETVAR   = 'pr'
-TRAINRANGE  = ('2000','2014')
-VALIDRANGE  = ('2015','2017')
-TESTRANGE   = ('2018','2020')
+config = Config()
+FILEDIR    = config.interimdir
+SAVEDIR    = config.splitdir
+TRAINRANGE = config.trainrange
+VALIDRANGE = config.validrange
+TESTRANGE  = config.testrange
 
-def retrieve(varname,filedir=FILEDIR):
+def split(splitrange,filedir=FILEDIR):
     '''
-    Purpose: Lazily import a variable as an xr.DataArray and standardize the dimension order.
+    Purpose: Load all NetCDF files a single xr.Dataset for a given split.
     Args:
-    - varname (str): variable short name
+    - splitrange (tuple[int,int]): inclusive start/end years for the split
     - filedir (str): directory containing the NetCDF files (defaults to FILEDIR)
-    Returns:
-    - xr.DataArray: DataArray with standardized dimensions
-    '''
-    filename = f'{varname}.nc'
-    filepath = os.path.join(filedir,filename)
-    da   = xr.open_dataarray(filepath,engine='h5netcdf')
-    order = tuple(dim for dim in ('lat','lon','lev','time') if dim in da.dims)
-    return da.transpose(*order) if order else da
-
-def split(splitrange,fieldvars=FIELDVARS,localvars=LOCALVARS,targetvar=TARGETVAR):
-    '''
-    Purpose: Assemble the target variable and all input variables into a single xr.Dataset for a given split.
-    Args:
-    - splitrange (tuple[str,str]): inclusive start/end years for the split
-    - fieldvars (list[str] | str): predictor field variable names (defaults to FIELDVARS)
-    - localvars (list[str] | str): local input variable name(s) (defaults to LOCALVARS)
-    - targetvar (str): target variable name (defaults to TARGETVAR)
     Returns:
     - xr.Dataset: split Dataset
     '''
-    fieldvars = fieldvars if isinstance(fieldvars,(list,tuple)) else [fieldvars]
-    localvars = localvars if isinstance(localvars,(list,tuple)) else [localvars]
-    varnames = list(fieldvars)+list(localvars)+[targetvar]
+    filepaths = sorted(glob.glob(os.path.join(filedir,'*.nc')))
+    if not filepaths:
+        raise FileNotFoundError(f'No .nc files found in `{filedir}`')
     datavars = {}
-    for varname in varnames:
-        da = retrieve(varname)
-        if 'time' in da.dims:
-            da = da.sel(time=slice(*splitrange))
-        datavars[varname] = da
+    for filepath in filepaths:
+        da   = xr.open_dataarray(filepath,engine='h5netcdf')
+        dims = tuple(dim for dim in ('lat','lon','lev','time') if dim in da.dims)
+        da   = da.transpose(*dims) if dims else da
+        datavars[da.name] = da
     ds = xr.Dataset(datavars)
+    ds = ds.sel(time=(ds.time.dt.year>=splitrange[0])&(ds.time.dt.year<=splitrange[1]))    
     return ds
 
 def calc_save_stats(trainds,filedir=SAVEDIR):
@@ -80,6 +64,7 @@ def calc_save_stats(trainds,filedir=SAVEDIR):
         stats[f'{varname}_mean'] = float(np.nanmean(arr.ravel()))
         stats[f'{varname}_std']  = float(np.nanstd(arr.ravel()))
     filename = 'stats.json'
+    os.makedirs(filedir,exist_ok=True)
     filepath = os.path.join(filedir,filename)
     with open(filepath,'w',encoding='utf-8') as f:
         json.dump(stats,f)

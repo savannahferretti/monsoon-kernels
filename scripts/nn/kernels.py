@@ -30,7 +30,7 @@ class QuadratureWeights:
         - lon (torch.Tensor): (nlons,) longitudes in degrees
         - lev (torch.Tensor): (nlevs,) vertical coordinate
         - time (torch.Tensor): (ntimes,) time coordinate
-        - rearth (float): Earth's radius [m]
+        - rearth (float): Earth's radius in meters (defaults to 6.371e6)
         Returns:
         - torch.Tensor: (nlats, nlons, nlevs, ntimes) ΔA Δp Δt weights
         '''
@@ -155,6 +155,12 @@ class ParametricKernelLayer(torch.nn.Module):
     def gaussian(coord,mu,logsigma):
         ''' 
         Purpose: Evaluate a Gaussian kernel along one axis for each (field, kernel) pair.
+        Args:
+        - coord (torch.Tensor): 1D coordinate tensor
+        - mu (torch.Tensor): (nfieldvars, nkernels) mean parameters
+        - logsigma (torch.Tensor): (nfieldvars, nkernels) log standard deviation parameters
+        Returns:
+        - torch.Tensor: (nfieldvars, nkernels, len(coord)) Gaussian kernel values
         '''
         sigma = torch.exp(logsigma)
         return torch.exp(-0.5*((coord[None,None,:]-mu[...,None])/sigma[...,None])**2)
@@ -163,6 +169,11 @@ class ParametricKernelLayer(torch.nn.Module):
     def exponential(coord,logtau):
         ''' 
         Purpose: Evaluate an exponential-decay kernel along one axis for each (field, kernel) pair.
+        Args:
+        - coord (torch.Tensor): 1D coordinate tensor
+        - logtau (torch.Tensor): (nfieldvars, nkernels) log decay scale parameters
+        Returns:
+        - torch.Tensor: (nfieldvars, nkernels, len(coord)) exponential kernel values
         '''
         tau = torch.exp(logtau)+1e-6
         return torch.exp(-coord[None,None,:]/tau[...,None])
@@ -190,19 +201,23 @@ class ParametricKernelLayer(torch.nn.Module):
                 coord    = torch.linspace(-1.0,1.0,steps=length,device=device,dtype=dtype)
                 mu       = self.mu[dim].to(device=device,dtype=dtype)
                 logsigma = self.logsigma[dim].to(device=device,dtype=dtype)
-                kernel1D = self.gaussian(coord,mu,logsigma)
+                kernel1d = self.gaussian(coord,mu,logsigma)
             elif family=='exponential':
                 coord  = torch.arange(length,device=device,dtype=dtype)
                 logtau = self.logtau[dim].to(device=device,dtype=dtype)
-                kernel1D = self.exponential(coord,logtau)
+                kernel1d = self.exponential(coord,logtau)
             shape = [self.nfieldvars,self.nkernels,1,1,1,1]
             shape[axis] = length
-            kernelparams = kernelparams*kernel1D.view(*shape)
+            kernelparams = kernelparams*kernel1d.view(*shape)
         return kernelparams
 
     def _normalized_weights(self,quadweights,device,dtype):
         '''
         Purpose: Normalize parametric kernels by their quadrature-weighted integral.
+        Args:
+        - quadweights (torch.Tensor): (plats, plons, plevs, ptimes)
+        - device (torch.device): target device
+        - dtype (torch.dtype): target dtype
         Returns:
         - torch.Tensor: (nfieldvars, nkernels, plats, plons, plevs, ptimes)
         '''

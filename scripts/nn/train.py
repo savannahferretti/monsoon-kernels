@@ -2,13 +2,10 @@
 
 import os
 import time
-import argparse
 import logging
 import warnings
-
 import numpy as np
 import torch
-import wandb
 from torch.utils.data import DataLoader
 
 from utils import Config
@@ -21,30 +18,22 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
-
-# -----------------------------------------------------------------------------#
-# Configs and device
-# -----------------------------------------------------------------------------#
-
-CFG         = Config()
-FILEDIR     = CFG.filedir
-MODELDIR    = CFG.modeldir
-FIELDVARS   = CFG.fieldvars
-LOCALVARS   = CFG.localvars
-TARGETVAR   = CFG.targetvar
-LATRANGE    = CFG.latrange
-LONRANGE    = CFG.lonrange
-PATCH_CFG   = CFG.patch
-TRAIN_CFG   = CFG.training
-MODEL_CFGS  = CFG.models
-
-SEED         = CFG.seed
-WORKERS      = CFG.workers
-EPOCHS       = CFG.epochs
-BATCHSIZE    = CFG.batchsize
-LEARNINGRATE = CFG.learningrate
-PATIENCE     = CFG.patience
-CRIT_NAME    = CFG.criterion
+CFG        = Config()
+FILEDIR    = CFG.filedir
+MODELDIR   = CFG.modeldir
+FIELDVARS  = CFG.fieldvars
+LOCALVARS  = CFG.localvars
+TARGETVAR  = CFG.targetvar
+LATRANGE   = CFG.latrange
+LONRANGE   = CFG.lonrange
+MODEL_CFGS = CFG.models
+SEED       = CFG.seed
+WORKERS    = CFG.workers
+EPOCHS     = CFG.epochs
+BATCHSIZE  = CFG.batchsize
+LRATE      = CFG.learningrate
+PATIENCE   = CFG.patience
+CRIT_NAME  = CFG.criterion
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 AMP_ENABLED = (DEVICE=='cuda')
@@ -56,26 +45,29 @@ if DEVICE=='cuda':
 torch.manual_seed(SEED)
 np.random.seed(SEED)
 
-
 def get_criterion(name):
     '''
     Purpose: Build a torch loss function from a string name in configs.json.
+    Args:
+    - name (str): loss function name (e.g., 'MSELoss')
+    Returns:
+    - torch.nn.Module: loss function instance
     '''
     if hasattr(torch.nn,name):
         return getattr(torch.nn,name)()
     raise ValueError(f'Unknown loss function `{name}` in configs.json')
-    
 
 CRITERION = get_criterion(CRIT_NAME)
-
-
-# -----------------------------------------------------------------------------#
-# Training utilities
-# -----------------------------------------------------------------------------#
 
 def save_best(modelstate,runname,modeldir=MODELDIR):
     '''
     Purpose: Save best (lowest validation loss) checkpoint for a run.
+    Args:
+    - modelstate (dict): model state dictionary
+    - runname (str): model run name
+    - modeldir (str): directory to save checkpoints (defaults to MODELDIR)
+    Returns:
+    - bool: True if save successful, False otherwise
     '''
     os.makedirs(modeldir,exist_ok=True)
     filename = f'{runname}_best.pth'
@@ -90,40 +82,33 @@ def save_best(modelstate,runname,modeldir=MODELDIR):
         logger.exception('      Failed to save or verify')
         return False
 
-
-def fit(model,runname,trainloader,validloader,
-        device=DEVICE,learningrate=LEARNINGRATE,
-        patience=PATIENCE,criterion=CRITERION,epochs=EPOCHS):
+def fit(model,runname,trainloader,validloader,device=DEVICE,lrate=LRATE,patience=PATIENCE,criterion=CRITERION,epochs=EPOCHS):
     '''
-    Purpose: Train a NN with early stopping and OneCycleLR, log to W&B, and save only the best checkpoint.
+    Purpose: Train a NN with early stopping and OneCycleLR, and save only the best checkpoint.
+    Args:
+    - model (torch.nn.Module): model to train
+    - runname (str): model run name for saving checkpoints
+    - trainloader (DataLoader): training data loader
+    - validloader (DataLoader): validation data loader
+    - device (str): device to train on (defaults to DEVICE)
+    - lrate (float): initial learning rate (defaults to LRATE)
+    - patience (int): early stopping patience (defaults to PATIENCE)
+    - criterion (torch.nn.Module): loss function (defaults to CRITERION)
+    - epochs (int): maximum number of epochs (defaults to EPOCHS)
     '''
     model     = model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(),lr=learningrate)
+    optimizer = torch.optim.Adam(model.parameters(),lr=lrate)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,max_lr=learningrate,
+        optimizer,max_lr=lrate,
         epochs=epochs,steps_per_epoch=len(trainloader),
         pct_start=0.1,anneal_strategy='cos')
-    scaler    = torch.cuda.amp.GradScaler(enabled=AMP_ENABLED)
-
-    wandb.init(
-        project='Chapter 2 Experiments',
-        name=runname,
-        config={
-            'Epochs':epochs,
-            'Batch size':trainloader.batch_size,
-            'Initial learning rate':learningrate,
-            'Early stopping patience':patience,
-            'Loss function':CRIT_NAME,
-            'AMP enabled':AMP_ENABLED})
-
+    scaler = torch.cuda.amp.GradScaler(enabled=AMP_ENABLED)
     bestloss  = float('inf')
     beststate = None
     bestepoch = 0
     noimprove = 0
     starttime = time.time()
-
     for epoch in range(1,epochs+1):
-        # --- train ---
         model.train()
         runningloss = 0.0
         for batch in trainloader:
@@ -132,7 +117,6 @@ def fit(model,runname,trainloader,validloader,
             if local is not None:
                 local = local.to(device,non_blocking=True)
             target = batch['target'].to(device,non_blocking=True)
-
             optimizer.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=AMP_ENABLED):
                 ypred = model(patch,local).squeeze(-1)
@@ -141,11 +125,8 @@ def fit(model,runname,trainloader,validloader,
             scaler.step(optimizer)
             scaler.update()
             scheduler.step()
-
             runningloss += loss.item()*patch.size(0)
         trainloss = runningloss/len(trainloader.dataset)
-
-        # --- validate ---
         model.eval()
         runningloss = 0.0
         with torch.no_grad():
@@ -160,15 +141,7 @@ def fit(model,runname,trainloader,validloader,
                     loss   = criterion(ypred,target)
                     runningloss += loss.item()*patch.size(0)
         validloss = runningloss/len(validloader.dataset)
-
-        wandb.log({
-            'Epoch':epoch,
-            'Training loss':trainloss,
-            'Validation loss':validloss,
-            'Learning rate':optimizer.param_groups[0]['lr']})
-
         logger.info(f'Epoch {epoch:03d} | Train: {trainloss:.6e} | Valid: {validloss:.6e}')
-
         if validloss<bestloss:
             bestloss  = validloss
             bestepoch = epoch
@@ -176,29 +149,21 @@ def fit(model,runname,trainloader,validloader,
             beststate = {k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
         else:
             noimprove += 1
-
         if noimprove>=patience:
             logger.info(f'Early stopping at epoch {epoch:03d}')
             break
-
     duration = time.time()-starttime
-    wandb.run.summary.update({
-        'Best model epoch':bestepoch,
-        'Best validation loss':bestloss,
-        'Total epochs':epoch,
-        'Training duration (s)':duration,
-        'Stopped early':noimprove>=patience})
-    wandb.finish()
-
+    logger.info(f'Best epoch: {bestepoch:03d} | Best valid loss: {bestloss:.6e} | Duration: {duration:.1f} s')
     if beststate is not None:
         save_best(beststate,runname)
 
-
-# -----------------------------------------------------------------------------#
-# Main
-# -----------------------------------------------------------------------------#
-
 def parse_args():
+    '''
+    Purpose: Parse command-line arguments for training script.
+    Returns:
+    - argparse.Namespace: parsed arguments
+    '''
+    import argparse
     parser = argparse.ArgumentParser(description='Train NN precipitation models.')
     parser.add_argument(
         '--models',
@@ -207,83 +172,89 @@ def parse_args():
         help='Comma-separated list of model names to train (as in configs.json "models.name"), or "all".')
     return parser.parse_args()
 
-
 if __name__=='__main__':
     args = parse_args()
     requested = [m.strip() for m in args.models.split(',')] if args.models!='all' else None
-
     logger.info('Loading training and validation splits...')
     trainds = load('train',FILEDIR)
     validds = load('valid',FILEDIR)
-
     logger.info('Converting splits to torch tensors...')
     fieldtrain,localtrain,targettrain = tensors(trainds,FIELDVARS,LOCALVARS,TARGETVAR)
     fieldvalid,localvalid,targetvalid = tensors(validds,FIELDVARS,LOCALVARS,TARGETVAR)
-
-    logger.info('Configuring patch...')
-    patch = Patch(
-        latradius=PATCH_CFG['latradius'],
-        lonradius=PATCH_CFG['lonradius'],
-        maxlevs=PATCH_CFG['maxlevs'],
-        timelag=PATCH_CFG['timelag'])
-    nlevs_full = fieldtrain.shape[3]
-    patchshape = patch.shape(nlevs_full)
-
-    logger.info('Building sample centers...')
-    centerstrain = patch.centers(
-        targetdata=targettrain,
-        lats=trainds['lat'].values,
-        lons=trainds['lon'].values,
-        latrange=LATRANGE,
-        lonrange=LONRANGE)
-    centersvalid = patch.centers(
-        targetdata=targetvalid,
-        lats=validds['lat'].values,
-        lons=validds['lon'].values,
-        latrange=LATRANGE,
-        lonrange=LONRANGE)
-
-    logger.info(f'Training samples: {len(centerstrain)}, validation samples: {len(centersvalid)}')
-
-    logger.info('Building SampleDataset objects...')
-    traindataset = SampleDataset(
-        fielddata=fieldtrain,
-        localdata=localtrain,
-        targetdata=targettrain,
-        centers=centerstrain,
-        patch=patch)
-    validdataset = SampleDataset(
-        fielddata=fieldvalid,
-        localdata=localvalid,
-        targetdata=targetvalid,
-        centers=centersvalid,
-        patch=patch)
-
-    logger.info('Building DataLoaders...')
-    common_loader_kwargs = dict(
+    nfieldvars = len(FIELDVARS)
+    nlocalvars = len(LOCALVARS)
+    nlevs = fieldtrain.shape[3]
+    commonkwargs = dict(
         num_workers=WORKERS,
         pin_memory=(DEVICE=='cuda'),
         persistent_workers=(WORKERS>0))
     if WORKERS>0:
-        common_loader_kwargs['prefetch_factor'] = 2
-
-    trainloader = DataLoader(
-        traindataset,batch_size=BATCHSIZE,shuffle=True,
-        **common_loader_kwargs)
-    validloader = DataLoader(
-        validdataset,batch_size=BATCHSIZE,shuffle=False,
-        **common_loader_kwargs)
-
-    nfieldvars = len(FIELDVARS)
-    nlocalvars = len(LOCALVARS)
-
+        commonkwargs['prefetch_factor'] = 2
     logger.info('Training selected models...')
+    cachedconfig = None
+    cachedpatch = None
+    cachedcenters = None
+    cacheddatasets = None
+    cachedloaders = None
     for modelcfg in MODEL_CFGS:
         modelname = modelcfg['name']
         if (requested is not None) and (modelname not in requested):
             continue
         logger.info(f'=== Training model: {modelname} ({modelcfg["type"]}) ===')
+        patchcfg = modelcfg['patch']
+        uselocal = modelcfg.get('uselocal',True)
+        currentconfig = (patchcfg['radius'],patchcfg['maxlevs'],patchcfg['timelag'],uselocal)
+        if currentconfig==cachedconfig:
+            logger.info('   Reusing cached patch, centers, datasets, and loaders')
+            patch = cachedpatch
+            patchshape = patch.shape(nlevs)
+            centerstrain = cachedcenters['train']
+            centersvalid = cachedcenters['valid']
+            traindataset = cacheddatasets['train']
+            validdataset = cacheddatasets['valid']
+            trainloader = cachedloaders['train']
+            validloader = cachedloaders['valid']
+        else:
+            patch = Patch(
+                radius=patchcfg['radius'],
+                maxlevs=patchcfg['maxlevs'],
+                timelag=patchcfg['timelag'])
+            patchshape = patch.shape(nlevs)
+            logger.info(f'   Patch shape: {patchshape}')
+            centerstrain = patch.centers(
+                targetdata=targettrain,
+                lats=trainds.lat.values,
+                lons=trainds.lon.values,
+                latrange=LATRANGE,
+                lonrange=LONRANGE)
+            centersvalid = patch.centers(
+                targetdata=targetvalid,
+                lats=validds.lat.values,
+                lons=validds.lon.values,
+                latrange=LATRANGE,
+                lonrange=LONRANGE)
+            logger.info(f'   Train samples: {len(centerstrain)}, valid samples: {len(centersvalid)}')
+            traindataset = SampleDataset(
+                fielddata=fieldtrain,
+                localdata=localtrain,
+                targetdata=targettrain,
+                centers=centerstrain,
+                patch=patch,
+                uselocal=uselocal)
+            validdataset = SampleDataset(
+                fielddata=fieldvalid,
+                localdata=localvalid,
+                targetdata=targetvalid,
+                centers=centersvalid,
+                patch=patch,
+                uselocal=uselocal)
+            trainloader = DataLoader(traindataset,batch_size=BATCHSIZE,shuffle=True,**commonkwargs)
+            validloader = DataLoader(validdataset,batch_size=BATCHSIZE,shuffle=False,**commonkwargs)
+            cachedconfig = currentconfig
+            cachedpatch = patch
+            cachedcenters = {'train':centerstrain,'valid':centersvalid}
+            cacheddatasets = {'train':traindataset,'valid':validdataset}
+            cachedloaders = {'train':trainloader,'valid':validloader}
         model = build_model_from_config(modelcfg,patchshape,nfieldvars,nlocalvars)
         fit(model,modelname,trainloader,validloader)
-
     logger.info('Finished training selected models.')
