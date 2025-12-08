@@ -1,18 +1,52 @@
 {
   "paths":{
-    "filedir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits",
-    "modeldir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/models/nn",
-    "resultsdir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/results"},
-  "params":{
-    "targetvar":"pr",
-    "epochs":30,
-    "batchsize":2208,
-    "learningrate":0.001,
-    "patience":5},
-  "runs":[
-    {"run_name":"mse_sdo_t","input_vars":["sdo","t"],"description":"$\\sigma_{orog}$ + $\\mathit{T}$"},
-    {"run_name":"mse_sdo_q","input_vars":["sdo","q"],"description":"$\\sigma_{orog}$ + $\\mathit{q}$"},
-    {"run_name":"mse_sdo_rh","input_vars":["sdo","rh"],"description":"$\\sigma_{orog}$ + RH"},
-    {"run_name":"mse_sdo_thetae","input_vars":["sdo","thetae"],"description":"$\\sigma_{orog}$ + $\\mathit{\\theta_{e}}$"},
-    {"run_name":"mse_sdo_thetaestar","input_vars":["sdo","thetaestar"],"description":"$\\sigma_{orog}$ + $\\mathit{\\theta_{e}^*}$"},
-    {"run_name":"mse_sdo_thetaeplus","input_vars":["sdo","thetaeplus"],"description":"$\\sigma_{orog}$ + $\\mathit{\\theta_{e}^+}$"}]}
+      "filedir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits",
+      "modeldir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/models/nn",
+      "featuredir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/features",
+      "resultsdir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/results"},
+  "variables":{
+      "fieldvars":["rh","thetae","thetaestar"],
+      "localvars":["lf","lhf","shf"],
+      "targetvar":"pr"},
+  "domain":{
+      "latrange":[5.0,25.0],
+      "lonrange":[60.0,90.0]},
+  "patch":{
+      "latradius":1,
+      "lonradius":1,
+      "maxlevs":16,
+      "timelag":6},
+  "training":{
+      "seed":42,
+      "workers":8,
+      "epochs":30,
+      "batchsize":2208,
+      "learningrate":0.001,
+      "patience":5,
+      "criterion":"MSELoss"},
+  "models":[
+      {"name":"baseline",
+          "type":"baseline",
+          "description":"Baseline"},
+      {"name":"nonparametric_p",
+          "type":"nonparametric",
+          "description":"Vertical Nonparametric Kernel",
+          "nkernels":4,
+          "kernel":{"dims":["lev"]}},
+      {"name":"nonparametric_x",
+          "type":"nonparametric",
+          "description":"Horizontal Nonparametric Kernel",
+          "nkernels":4,
+          "kernel":{"dims":["lat","lon"]}},
+      {"name":"gaussian_p",
+          "type":"parametric",
+          "description":"Vertical Gaussian Kernel",
+          "nkernels":1,
+          "kernel":{"lev":"gaussian"}},
+      {"name":"exponential_t",
+          "type":"parametric",
+          "description":"Temporal Exponential Kernel",
+          "nkernels":1,
+          "kernel":{"time":"exponential"}}
+  ]
+}

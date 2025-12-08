@@ -21,7 +21,8 @@ LONRANGE = (60.0,90.0)
 
 def retrieve(longname,filedir=FILEDIR):
     '''
-    Purpose: Lazily import in a NetCDF file as an xr.DataArray and, if applicable, ensure pressure levels are ascending (e.g., [500,550,600,...] hPa).
+    Purpose: Lazily import in a NetCDF file as an xr.DataArray and, if applicable, ensure pressure levels 
+    are ascending (e.g., [500,550,600,...] hPa).
     Args:
     - longname (str): variable long name/description
     - filedir (str): directory containing the file (defaults to FILEDIR)
@@ -45,19 +46,8 @@ def create_p_array(refda):
     Returns:
     - xr.DataArray: pressure DataArray
     '''
-    p = refda.lev.expand_dims({'time':refda.time,'lat':refda.lat,'lon':refda.lon}).transpose('lev','time','lat','lon')
+    p = refda.lev.expand_dims({'lat':refda.lat,'lon':refda.lon,'time':refda.time}).transpose('lat','lon','lev','time')
     return p
-
-def create_level_mask(refda,ps):
-    '''
-    Purpose: Create a below-surface level mask; 1 where levels exist (lev ≤ ps), else 0.
-    - refda (xr.DataArray): reference DataArray containing 'lev'
-    - ps (xr.DataArray): surface pressure (hPa)
-    Returns:
-    - xr.DataArray: DataArray of 0's (invalid levels) or 1's (valid levels)
-    '''
-    levmask = (refda.lev<=ps).transpose('time','lat','lon','lev').astype('uint8')
-    return levmask
 
 def resample(da):
     '''
@@ -74,7 +64,7 @@ def resample(da):
     
 def regrid(da,latrange=LATRANGE,lonrange=LONRANGE):
     '''
-    Purpose: Regrids a DataArray to a 1° x 1° target grid.
+    Purpose: Regrids a DataArray to a 1.0° x 1.0° target grid that extends 1 cell beyond 'latrange'/'lonrange' in each direction.
     Args:
     - da (xr.DataArray): input DataArray (with halo)
     - latrange (tuple[float,float]): target latitude range (defaults to LATRANGE)
@@ -82,8 +72,8 @@ def regrid(da,latrange=LATRANGE,lonrange=LONRANGE):
     Returns:
     - xr.DataArray: DataArray regridded to target domain
     '''
-    targetlats = np.arange(latrange[0],latrange[1]+1.0,1.0)
-    targetlons = np.arange(lonrange[0],lonrange[1]+1.0,1.0)
+    targetlats = np.arange(latrange[0]-1.0,latrange[1]+2.0,1.0)
+    targetlons = np.arange(lonrange[0]-1.0,lonrange[1]+2.0,1.0)
     targetgrid = xr.Dataset({'lat':(['lat'],targetlats),'lon':(['lon'],targetlons)})
     regridder  = xesmf.Regridder(da,targetgrid,method='conservative')
     da = regridder(da,keep_attrs=True)
@@ -105,7 +95,8 @@ def calc_es(t):
 
 def calc_qs(p,t):
     '''
-    Purpose: Calculate saturation specific humidity (qₛ) using Eq. 4 from Miller SFK. (2018), Atmos. Humidity Eq. Plymouth State Wea. Ctr.
+    Purpose: Calculate saturation specific humidity (qₛ) using Eq. 4 from Miller SFK. (2018), Atmos. 
+    Humidity Eq. Plymouth State Wea. Ctr.
     Args:
     - p (xr.DataArray): pressure DataArray (hPa)
     - t (xr.DataArray): temperature DataArray (K)
@@ -127,7 +118,7 @@ def calc_rh(p,t,q):
     - t (xr.DataArray): temperature DataArray (K)
     - q (xr.DataArray): specific humidity DataArray (kg/kg)
     Returns:
-    - xr.DataArray: relative humidity DataArray (%)
+    - xr.DataArray: RH DataArray (%)
     '''
     qs = calc_qs(p,t)         
     rh = (q/qs)*100.0      
@@ -136,7 +127,8 @@ def calc_rh(p,t,q):
 
 def calc_thetae(p,t,q=None):
     '''
-    Purpose: Calculate (unsaturated or saturated) equivalent potential temperature (θₑ) using Eqs. 43 and 55 from Bolton D. (1980), Mon. Wea. Rev.       
+    Purpose: Calculate (unsaturated or saturated) equivalent potential temperature (θₑ) using Eqs. 43 and 55 
+    from Bolton D. (1980), Mon. Wea. Rev.       
     Args:
     - p (xr.DataArray): pressure DataArray (hPa)
     - t (xr.DataArray): temperature DataArray (K)
@@ -158,7 +150,8 @@ def calc_thetae(p,t,q=None):
 
 def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     '''
-    Purpose: Wrap a standardized xr.DataArray into an xr.Dataset, preserving coordinates and setting variable and global metadata.
+    Purpose: Wrap a standardized xr.DataArray into an xr.Dataset, preserving coordinates and setting 
+    variable and global metadata.
     Args:
     - da (xr.DataArray): input DataArray
     - shortname (str): variable name (abbreviation)
@@ -169,80 +162,89 @@ def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     Returns:
     - xr.Dataset: Dataset containing the variable named 'shortname' and metadata
     '''    
-    dims = [dim for dim in ('time','lat','lon','lev') if dim in da.dims]
+    dims = [dim for dim in ('lat','lon','lev','time') if dim in da.dims]
     da = da.transpose(*dims)
     ds = da.to_dataset(name=shortname)
     ds[shortname].attrs = dict(long_name=longname,units=units)
-    if 'time' in ds.coords:
-        ds.time.attrs = dict(long_name='Time')
     if 'lat' in ds.coords:
         ds.lat.attrs  = dict(long_name='Latitude',units='°N')
     if 'lon' in ds.coords:
         ds.lon.attrs  = dict(long_name='Longitude',units='°E')
     if 'lev' in ds.coords:
         ds.lev.attrs  = dict(long_name='Pressure level',units='hPa')
+    if 'time' in ds.coords:
+        ds.time.attrs = dict(long_name='Time')
     ds.attrs = dict(history=f'Created on {datetime.today().strftime("%Y-%m-%d")} by {author} ({email})')
     logger.info(f'   {shortname}: {ds.nbytes*1e-9:.3f} GB')
     return ds
-    
-def save(ds,savedir=SAVEDIR):
+
+def save(ds,timechunksize=2208,savedir=SAVEDIR):
     '''
     Purpose: Save an xr.Dataset to a NetCDF file in the specified directory, then verify the write by reopening.
     Args:
     - ds (xr.Dataset): Dataset to save
+    - timechunksize (int): chunk size for the 'time' dimension (defaults to 2,208 for 3-month chunks)
     - savedir (str): output directory (defaults to SAVEDIR)
     Returns:
     - bool: True if write and verification succeed, otherwise False
-    '''  
+    '''
     os.makedirs(savedir,exist_ok=True)
     shortname = list(ds.data_vars)[0]
-    filename  = f'{shortname}.nc' 
+    filename  = f'{shortname}.nc'
     filepath  = os.path.join(savedir,filename)
-    encoding  = {name: {'dtype':('uint8' if name=='levmask' else 'float32')} for name in ds.data_vars}
-    encoding.update({coord:{'dtype':'float32'} for coord in ('lat','lon','lev') if coord in ds.coords})
-    logger.info(f'   Attempting to save {filename}...')   
+    logger.info(f'   Attempting to save {filename}...') 
+    ds.load()
+    ds[shortname].encoding = {}
+    encodingchunks = []
+    for dim,size in zip(ds[shortname].dims,ds[shortname].shape):
+        if dim=='time':
+            encodingchunks.append(min(timechunksize,size))
+        else:
+            encodingchunks.append(size)
+    encoding = {shortname:{'chunksizes':tuple(encodingchunks)}}
     try:
         ds.to_netcdf(filepath,engine='h5netcdf',encoding=encoding)
-        with xr.open_dataset(filepath,engine='h5netcdf') as _:
-            pass
+        xr.open_dataset(filepath,engine='h5netcdf').close()
         logger.info('      File write successful')
         return True
     except Exception:
         logger.exception('      Failed to save or verify')
         return False
+        
 
 if __name__=='__main__':
     logger.info('Importing all raw variables...')
-    pr  = retrieve('IMERG_V06_precipitation_rate')
-    sdo = retrieve('ERA5_standard_deviation_of_orography')
     ps  = retrieve('ERA5_surface_pressure')
     t   = retrieve('ERA5_air_temperature')
     q   = retrieve('ERA5_specific_humidity')
+    lf  = retrieve('ERA5_land_fraction')
+    lhf = retrieve('ERA5_mean_surface_latent_heat_flux')
+    shf = retrieve('ERA5_mean_surface_sensible_heat_flux')
+    pr  = retrieve('IMERG_V06_precipitation_rate')
     logger.info('Resampling/regridding variables...')
-    pr  = regrid(resample(pr)).clip(min=0).load()
-    sdo = regrid(sdo).load()
     ps  = regrid(ps).load()
     t   = regrid(t).load()
     q   = regrid(q).load()
-    logger.info('Creating below-surface level mask...')
-    levmask = create_level_mask(t,ps)
+    lf  = regrid(lf).load()
+    lhf = regrid(lhf).load()
+    shf = regrid(shf).load()
+    pr  = regrid(resample(pr)).clip(min=0).load()
     logger.info('Calculating relative humidity and equivalent potential temperature terms...')
     p          = create_p_array(q)
     rh         = calc_rh(p,t,q)
     thetae     = calc_thetae(p,t,q)
     thetaestar = calc_thetae(p,t)
-    thetaeplus = thetaestar-thetae
     logger.info('Creating datasets...')
-    dslist = [
-        dataset(pr,'pr','Precipitation rate','mm/hr'),
-        dataset(sdo,'sdo','Standard deviation of orography','m'),
+    dslist = [        
         dataset(t,'t','Air temperature','K'),
         dataset(q,'q','Specific humidity','kg/kg'),
         dataset(rh,'rh','Relative humidity','%'),
         dataset(thetae,'thetae','Equivalent potential temperature','K'),
         dataset(thetaestar,'thetaestar','Saturated equivalent potential temperature','K'),
-        dataset(thetaeplus,'thetaeplus','Difference between saturated and unsaturated equivalent potential temperature','K'),
-        dataset(levmask,'levmask','Below-surface level mask','N/A'),]
+        dataset(lf,'lf','Land fraction','0-1'),
+        dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
+        dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
+        dataset(pr,'pr','Precipitation rate','mm/hr')]
     logger.info('Saving datasets...')
     for ds in dslist:
         save(ds)
