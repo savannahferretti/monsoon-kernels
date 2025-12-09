@@ -160,6 +160,11 @@ def calc_quadrature_weights(refda,rearth=6.371e6):
     Returns:
     - xr.DataArray: quadrature weights with dims ('lat', 'lon', 'lev', 'time')
     '''
+    refda = refda.transpose('lat','lon','lev','time')
+    lats  = refda.lat.values
+    lons  = refda.lon.values
+    levs  = refda.lev.values
+    times = np.arange(refda.time.size,dtype=np.float32)
     def spacing(coord):
         '''
         Purpose: Estimate spacing between neighboring coordinate points using centered differences in the interior 
@@ -174,17 +179,13 @@ def calc_quadrature_weights(refda,rearth=6.371e6):
         spacing[0]    = coord[1]-coord[0]
         spacing[-1]   = coord[-1]-coord[-2]
         return np.abs(spacing)
-    lats  = refda.lat.values
-    lons  = refda.lon.values
-    levs  = refda.lev.values
-    times = np.arange(refda.time.size,dtype=np.float32)
     dlat  = spacing(np.deg2rad(lats))
     dlon  = spacing(np.deg2rad(lons))
     dlev  = spacing(levs)
     dtime = spacing(times)
     area  = ((rearth**2)*np.cos(np.deg2rad(lats))*dlat).reshape(lats.size,1)*dlon.reshape(1,lons.size)
-    weights = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size)
-    weightsda = xr.DataArray(weights.astype(np.float32),dims=refda.dims,coords=refda.coords,name='quadweights')
+    weights = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size).astype(np.float32)
+    weightsda = xr.DataArray(weights,dims=('lat','lon','lev','time'),coords=dict(lat=refda.lat,lon=refda.lon,lev=refda.lev,time=refda.time))
     return weightsda
 
 def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
