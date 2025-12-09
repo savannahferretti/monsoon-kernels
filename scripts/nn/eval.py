@@ -69,21 +69,21 @@ def load_checkpoint(model, runname, modeldir=MODELDIR):
     return True
 
 
-def denormalize_precip(ynorm, targetvar=TARGETVAR, stats=STATS):
-    '''
-    Purpose: Undo z-score + log1p normalization using pre-loaded stats.
-    Args:
-    - ynorm (np.ndarray): normalized predictions (nsamples,)
-    - targetvar (str): target variable name used to construct keys in stats (defaults to TARGETVAR)
-    - stats (dict): loaded statistics from stats.json (defaults to STATS)
-    Returns:
-    - np.ndarray: denormalized predictions (nsamples,)
-    '''
-    mean = float(stats[f'{targetvar}_mean'])
-    std = float(stats[f'{targetvar}_std'])
-    ylog = ynorm * std + mean
-    y = np.expm1(ylog)
-    return y
+# def denormalize_precip(ynorm, targetvar=TARGETVAR, stats=STATS):
+#     '''
+#     Purpose: Undo z-score + log1p normalization using pre-loaded stats.
+#     Args:
+#     - ynorm (np.ndarray): normalized predictions (nsamples,)
+#     - targetvar (str): target variable name used to construct keys in stats (defaults to TARGETVAR)
+#     - stats (dict): loaded statistics from stats.json (defaults to STATS)
+#     Returns:
+#     - np.ndarray: denormalized predictions (nsamples,)
+#     '''
+#     mean = float(stats[f'{targetvar}_mean'])
+#     std = float(stats[f'{targetvar}_std'])
+#     ylog = ynorm * std + mean
+#     y = np.expm1(ylog)
+#     return y
 
 
 def predict_precip(model, loader, centers, targettemplate, quadweights, device=DEVICE):
@@ -119,11 +119,13 @@ def predict_precip(model, loader, centers, targettemplate, quadweights, device=D
     duration = time.time() - start
     logger.info(f'   Inference time: {duration:.1f} s')
     ynorm = np.concatenate(preds, axis=0)
-    yphys = denormalize_precip(ynorm)
+    # yphys = denormalize_precip(ynorm)
     arr = np.full(targettemplate.shape, np.nan, dtype=np.float64)
     for idx, (ilat, ilon, itime) in enumerate(centers):
-        arr[ilat, ilon, itime] = yphys[idx]
+        # arr[ilat, ilon, itime] = yphys[idx]
+        arr[ilat, ilon, itime] = ynorm[idx]
     return arr
+
 
 
 def save_precip(arr, templateda, runname, splitname, resultsdir=RESULTSDIR):
@@ -145,7 +147,7 @@ def save_precip(arr, templateda, runname, splitname, resultsdir=RESULTSDIR):
         coords=templateda.coords,
         name='pr')
     da.attrs = dict(long_name='NN-predicted precipitation rate', units='mm/hr')
-    filename = f'nn_{runname}_{splitname}_pr.nc'
+    filename = f'{runname}_{splitname}_pr.nc'
     filepath = os.path.join(resultsdir, filename)
     logger.info(f'   Attempting to save {filename}...')
     try:

@@ -45,9 +45,8 @@ class DataPrep:
         if localvars:
             locallist = []
             for varname in localvars:
-                da = ds[varname]
-
-                    arr = da.values if 'time' in da.dims else np.broadcast_to(da.values[..., None],(da.values.shape[0],da.values.shape[1],ds.time.size))
+                da  = ds[varname]
+                arr = da.values if 'time' in da.dims else np.broadcast_to(da.values[..., None],(da.values.shape[0],da.values.shape[1],ds.time.size))
                 locallist.append(arr)
             localdata = torch.from_numpy(np.stack(locallist,axis=0))
         else:

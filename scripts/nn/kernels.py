@@ -22,7 +22,7 @@ class NonparametricKernelLayer(torch.nn.Module):
         self.kerneldims = tuple(kerneldims)
         paramsizes = [size if dim in self.kerneldims else 1
                       for dim, size in zip(('lat', 'lon', 'lev', 'time'), self.patchshape)]
-        self.kernelparams = torch.nn.Parameter(torch.zeros(self.nfieldvars, self.nkernels, *paramsizes))
+        self.kernelparams = torch.nn.Parameter(torch.ones(self.nfieldvars, self.nkernels, *paramsizes))
 
     def _normalized_weights(self, quadweights, device, dtype):
         '''
@@ -36,7 +36,7 @@ class NonparametricKernelLayer(torch.nn.Module):
         '''
         quadweights = quadweights.to(device=device, dtype=dtype)
         kernelparams = self.kernelparams.to(device=device, dtype=dtype)
-        integrated = torch.einsum('fkyxpt,yxpt->fk', kernelparams, quadweights) + 1e-8
+        integrated = torch.einsum('fkyxpt,yxpt->fk', kernelparams, quadweights) + 1e-4
         kernelweights = kernelparams / integrated[:, :, None, None, None, None]
         return kernelweights
 
@@ -177,7 +177,7 @@ class ParametricKernelLayer(torch.nn.Module):
         '''
         quadweights = quadweights.to(device=device, dtype=dtype)
         kernelparams = self._build_kernel_params(device, dtype)
-        integrated = torch.einsum('fkyxpt,yxpt->fk', kernelparams, quadweights) + 1e-8
+        integrated = torch.einsum('fkyxpt,yxpt->fk', kernelparams, quadweights) + 1e-4
         kernelweights = kernelparams / integrated[:, :, None, None, None, None]
         return kernelweights
 
