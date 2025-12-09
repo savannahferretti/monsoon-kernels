@@ -17,7 +17,7 @@ logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(l
 logging.getLogger('azure').setLevel(logging.WARNING)
 logging.getLogger('fsspec').setLevel(logging.WARNING)
 
-logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
@@ -35,7 +35,7 @@ def retrieve_era5():
     '''
     Purpose: Retrieve the ERA5 (ARCO) Zarr store from Google Cloud and return it as an xr.Dataset.
     Returns:
-    - xr.Dataset: ERA5 Dataset on success, the program exists if access fails
+    - xr.Dataset: ERA5 Dataset on success, the program exits if access fails
     '''
     try:
         store = 'gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3'
@@ -50,13 +50,14 @@ def retrieve_imerg():
     '''
     Purpose: Retrieve the GPM IMERG V06 Zarr store from Microsoft Planetary Computer and return it as an xr.Dataset.
     Returns: 
-    - xr.Dataset: IMERG V06 Dataset on success, the program exists if access fails
+    - xr.Dataset: IMERG V06 Dataset on success, the program exits if access fails
     '''
     try:
         store   = 'https://planetarycomputer.microsoft.com/api/stac/v1'
         catalog = pystac.Client.open(store,modifier=planetary_computer.sign_inplace)
         assets  = catalog.get_collection('gpm-imerg-hhr').assets['zarr-abfs']
-        ds      = xr.open_zarr(fsspec.get_mapper(assets.href,**assets.extra_fields['xarray:storage_options']),chunks={},consolidated=True)
+        mapper  = fsspec.get_mapper(assets.href,**assets.extra_fields['xarray:storage_options'])
+        ds      = xr.open_zarr(mapper,chunks={},consolidated=True)
         logger.info('   Successfully retrieved IMERG')
         return ds
     except Exception:
@@ -65,7 +66,7 @@ def retrieve_imerg():
     
 def standardize(da):
     '''
-    Purpose: Standardize the names, data types, and order of dimensions of an xr.DataArray.
+    Purpose: Standardize the dimension names, data types, and order of an xr.DataArray.
     Args: 
     - da (xr.DataArray): input DataArray
     Returns: 
@@ -88,15 +89,16 @@ def standardize(da):
     da = da.sortby(targetdims).transpose(*targetdims)   
     return da
 
-def subset(da,halo=0,latrange=LATRANGE,lonrange=LONRANGE,levrange=LEVRANGE,years=YEARS,months=MONTHS):
+def subset(da,radius=0,latrange=LATRANGE,lonrange=LONRANGE,levrange=LEVRANGE,years=YEARS,months=MONTHS):
     '''
-    Purpose: Subset an xr.DataArray by latitude/longitude ranges, and, if present, by pressure levels and time (years/months).
+    Purpose: Subset an xr.DataArray by a horizontal domain, and, if present, by pressure levels and time.
     Args:
     - da (xr.DataArray): input DataArray
-    - halo (int): number of grid cells to include beyond each edge for regridding (defaults to 0, which disables the halo)
-    - latrange (tuple[float,float]): minimum/maximum latitude (defaults to LATRANGE)
-    - lonrange (tuple[float,float]): minimum/maximum longitude (defaults to LONRANGE)
-    - levrange (tuple[float,float]): minimum/maximum pressure level in hPa (defaults to LEVRANGE)
+    - radius (int): number of grid cells to include beyond domain bounds regridding (defaults to 0, 
+      which disables the radius)
+    - latrange (tuple[float,float]): latitude range (defaults to LATRANGE)
+    - lonrange (tuple[float,float]): longitude range (defaults to LONRANGE)
+    - levrange (tuple[float,float]): pressure level range in hPa (defaults to LEVRANGE)
     - years (list[int]): years to include (defaults to YEARS)
     - months (list[int]): months to include (defaults to MONTHS)
     Returns:
@@ -107,9 +109,9 @@ def subset(da,halo=0,latrange=LATRANGE,lonrange=LONRANGE,levrange=LEVRANGE,years
     if 'lev' in da.dims:
         levmin,levmax = levrange[0],levrange[1]
         da = da.sel(lev=slice(levmin,levmax)) 
-    if halo:
-        latpad = halo*float(np.abs(np.median(np.diff(da.lat.values))))
-        lonpad = halo*float(np.abs(np.median(np.diff(da.lon.values))))
+    if radius:
+        latpad = radius*float(np.abs(np.median(np.diff(da.lat.values))))
+        lonpad = radius*float(np.abs(np.median(np.diff(da.lon.values))))
         latmin = max(float(da.lat.min()),latrange[0]-latpad)
         latmax = min(float(da.lat.max()),latrange[1]+latpad)
         lonmin = max(float(da.lon.min()),lonrange[0]-lonpad)
@@ -122,11 +124,12 @@ def subset(da,halo=0,latrange=LATRANGE,lonrange=LONRANGE,levrange=LEVRANGE,years
 
 def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     '''
-    Purpose: Wrap a standardized xr.DataArray into an xr.Dataset, preserving coordinates and setting variable and global metadata.
+    Purpose: Wrap a standardized xr.DataArray into an xr.Dataset, preserving coordinates and setting 
+    variable and global metadata.
     Args:
     - da (xr.DataArray): input DataArray
-    - shortname (str): variable name (abbreviation)
-    - longname (str): variable long name/description
+    - shortname (str): variable name
+    - longname (str): variable description
     - units (str): variable units
     - author (str): author name (defaults to AUTHOR)
     - email (str): author email (defaults to EMAIL)    
@@ -147,19 +150,21 @@ def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     logger.info(f'   {longname} size: {ds.nbytes*1e-9:.3f} GB')
     return ds
 
-def process(da,shortname,longname,units,halo=0,latrange=LATRANGE,lonrange=LONRANGE,levrange=LEVRANGE,years=YEARS,months=MONTHS,author=AUTHOR,email=EMAIL):
+def process(da,shortname,longname,units,radius=0,latrange=LATRANGE,lonrange=LONRANGE,levrange=LEVRANGE,
+            years=YEARS,months=MONTHS,author=AUTHOR,email=EMAIL):
     '''
     Purpose: Convert an xr.DataArray into an xr.Dataset by applying the standardize(), subset(), and 
     dataset() functions in sequence.
     Args:
     - da (xr.DataArray): input DataArray
-    - shortname (str): variable name (abbreviation)
-    - longname (str): variable long name/description 
+    - shortname (str): variable name
+    - longname (str): variable description 
     - units (str): variable units
-    - halo (int): number of grid cells to include beyond each edge for regridding (defaults to 0, which disables the halo)
-    - latrange (tuple[float,float]): minimum/maximum latitude (defaults to LATRANGE)
-    - lonrange (tuple[float,float]): minimum/maximum longitude (defaults to LONRANGE)
-    - levrange (tuple[float,float]): minimum/maximum pressure level in hPa (defaults to LEVRANGE)
+    - radius (int): number of grid cells to include beyond domain bounds for regridding (defaults to 0, 
+      which disables the radius)
+    - latrange (tuple[float,float]): latitude range (defaults to LATRANGE)
+    - lonrange (tuple[float,float]): longitude range (defaults to LONRANGE)
+    - levrange (tuple[float,float]): pressure level range in hPa (defaults to LEVRANGE)
     - years (list[int]): years to include (defaults to YEARS)
     - months (list[int]): months to include (defaults to MONTHS)
     - author (str): author name (defaults to AUTHOR)
@@ -168,19 +173,19 @@ def process(da,shortname,longname,units,halo=0,latrange=LATRANGE,lonrange=LONRAN
     - xr.Dataset: processed Dataset
     ''' 
     da = standardize(da)
-    da = subset(da,halo,latrange,lonrange,levrange,years,months)
+    da = subset(da,radius,latrange,lonrange,levrange,years,months)
     ds = dataset(da,shortname,longname,units,author,email)
     return ds
 
 def save(ds,timechunksize=2208,savedir=SAVEDIR):
     '''
-    Purpose: Save an xr.Dataset to a NetCDF file in the specified directory, then verify the write by reopening.
+    Purpose: Save an xr.Dataset to a NetCDF file, then verify by reopening.
     Args:
     - ds (xr.Dataset): Dataset to save
     - timechunksize (int): chunk size for the 'time' dimension (defaults to 2,208 for 3-month chunks)
     - savedir (str): output directory (defaults to SAVEDIR)
     Returns:
-    - bool: True if write and verification succeed, otherwise False
+    - bool: True if write and verification succeed, False otherwise
     '''
     os.makedirs(savedir,exist_ok=True)
     shortname = list(ds.data_vars)[0]
@@ -221,13 +226,13 @@ if __name__=='__main__':
     del era5,imerg
     logger.info('Creating datasets...')
     dslist = [
-        process(psdata,'ps','ERA5 surface pressure','hPa',halo=4),
-        process(tdata,'t','ERA5 air temperature','K',halo=4),
-        process(qdata,'q','ERA5 specific humidity','kg/kg',halo=4),
-        process(lfdata,'lf','ERA5 land fraction','0-1',halo=4),
-        process(lhfdata,'lhf','ERA5 mean surface latent heat flux','W/m²',halo=4),
-        process(shfdata,'shf','ERA5 mean surface sensible heat flux','W/m²',halo=4),
-        process(prdata,'pr','IMERG V06 precipitation rate','mm/hr',halo=10)]
+        process(psdata,'ps','ERA5 surface pressure','hPa',radius=4),
+        process(tdata,'t','ERA5 air temperature','K',radius=4),
+        process(qdata,'q','ERA5 specific humidity','kg/kg',radius=4),
+        process(lfdata,'lf','ERA5 land fraction','0-1',radius=4),
+        process(lhfdata,'lhf','ERA5 mean surface latent heat flux','W/m²',radius=4),
+        process(shfdata,'shf','ERA5 mean surface sensible heat flux','W/m²',radius=4),
+        process(prdata,'pr','IMERG V06 precipitation rate','mm/hr',radius=10)]
     del psdata,tdata,qdata,lfdata,lhfdata,shfdata,prdata
     logger.info('Saving datasets...')
     for ds in dslist:

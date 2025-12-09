@@ -10,7 +10,7 @@ import numpy as np
 import xarray as xr
 from utils import Config
 
-logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
@@ -23,16 +23,14 @@ TESTRANGE  = config.testrange
 
 def split(splitrange,filedir=FILEDIR):
     '''
-    Purpose: Load all NetCDF files a single xr.Dataset for a given split.
+    Purpose: Load all NetCDF files into a single xr.Dataset for a given split.
     Args:
-    - splitrange (tuple[int,int]): inclusive start/end years for the split
+    - splitrange (tuple[int,int]): inclusive year range for the split
     - filedir (str): directory containing the NetCDF files (defaults to FILEDIR)
     Returns:
     - xr.Dataset: split Dataset
     '''
     filepaths = sorted(glob.glob(os.path.join(filedir,'*.nc')))
-    if not filepaths:
-        raise FileNotFoundError(f'No .nc files found in `{filedir}`')
     datavars = {}
     for filepath in filepaths:
         da   = xr.open_dataarray(filepath,engine='h5netcdf')
@@ -43,13 +41,13 @@ def split(splitrange,filedir=FILEDIR):
     ds = ds.sel(time=(ds.time.dt.year>=splitrange[0])&(ds.time.dt.year<=splitrange[1]))    
     return ds
 
-def calc_save_stats(trainds,filedir=SAVEDIR):
+def stats(trainds,savedir=SAVEDIR):
     '''
     Purpose: Compute training-set statistics for each variable and save them to JSON. Statistics are not calculated 
     for land fraction, and precipitation is log1p-transformed before statistics are calculated.
     Args:
     - trainds (xr.Dataset): training Dataset
-    - filedir (str): output directory for saving the JSON file (defaults to SAVEDIR)
+    - savedir (str): output directory (defaults to SAVEDIR)
     Returns:
     - dict[str,float]: the training set mean/standard deviation for select variables in 'trainds'
     '''
@@ -64,8 +62,8 @@ def calc_save_stats(trainds,filedir=SAVEDIR):
         stats[f'{varname}_mean'] = float(np.nanmean(arr.ravel()))
         stats[f'{varname}_std']  = float(np.nanstd(arr.ravel()))
     filename = 'stats.json'
-    os.makedirs(filedir,exist_ok=True)
-    filepath = os.path.join(filedir,filename)
+    os.makedirs(savedir,exist_ok=True)
+    filepath = os.path.join(savedir,filename)
     with open(filepath,'w',encoding='utf-8') as f:
         json.dump(stats,f)
     logger.info(f'   Wrote statistics to {filename}')
@@ -101,14 +99,14 @@ def normalize(ds,stats):
 
 def save(ds,splitname,timechunksize=2208,savedir=SAVEDIR):
     '''
-    Purpose: Save an xr.Dataset for a given split to a HDF5 file, then verify the write by reopening.
+    Purpose: Save an xr.Dataset to an HDF5 file, then verify the write by reopening.
     Args:
     - ds (xr.Dataset): Dataset to save
     - splitname (str): 'train' | 'valid' | 'test'
-    - chunksize (int): number of time steps to include for chunking (defaults to 2,208 for 3-month chunks)
+    - timechunksize (int): number of time steps to include for chunking (defaults to 2,208 for 3-month chunks)
     - savedir (str): output directory (defaults to SAVEDIR)
     Returns:
-    - bool: True if writing and verification succeed, otherwise False
+    - bool: True if writing and verification succeed, False otherwise
     '''
     os.makedirs(savedir,exist_ok=True)
     filename = f'{splitname}.h5'

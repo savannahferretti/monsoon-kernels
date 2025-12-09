@@ -9,7 +9,7 @@ import xarray as xr
 from utils import Config
 from datetime import datetime
 
-logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
@@ -26,16 +26,16 @@ def retrieve(longname,filedir=FILEDIR):
     Purpose: Lazily import in a NetCDF file as an xr.DataArray and, if applicable, ensure pressure levels 
     are ascending (e.g., [500,550,600,...] hPa).
     Args:
-    - longname (str): variable long name/description
-    - filedir (str): directory containing the file (defaults to FILEDIR)
+    - longname (str): variable description
+    - filedir (str): directory containing the NetCDF file (defaults to FILEDIR)
     Returns:
-    - xr.DataArray: loaded DataArray with levels ordered (if applicable) 
+    - xr.DataArray: DataArray with levels ordered (if applicable) 
     '''
     filename = f'{longname}.nc'
     filepath = os.path.join(filedir,filename)
     da = xr.open_dataarray(filepath,engine='h5netcdf')
     if 'lev' in da.dims:
-        if not np.all(np.diff(da['lev'].values)>0):
+        if not np.all(np.diff(da.lev.values)>0):
             da = da.sortby('lev')
             logger.info(f'   Levels for {filename} were reordered to ascending')
     return da
@@ -53,7 +53,7 @@ def create_p_array(refda):
 
 def resample(da):
     '''
-    Purpose: Compute a centered hourly mean (uses the two half-hour samples that straddle each hour; falls back to 
+    Purpose: Compute a centered hourly mean (using the two half-hour samples that straddle each hour; falls back to 
     one at boundaries).
     Args:
     - da (xr.DataArray): input DataArray
@@ -66,9 +66,9 @@ def resample(da):
     
 def regrid(da,latrange=LATRANGE,lonrange=LONRANGE):
     '''
-    Purpose: Regrids a DataArray to a 1.0° x 1.0° target grid that extends 1 cell beyond 'latrange'/'lonrange' in each direction.
+    Purpose: Regrids a DataArray to a 1.0° x 1.0° target grid that extends 1 cell beyond domain bounds.
     Args:
-    - da (xr.DataArray): input DataArray (with halo)
+    - da (xr.DataArray): input DataArray (with radius)
     - latrange (tuple[float,float]): target latitude range (defaults to LATRANGE)
     - lonrange (tuple[float,float]): target longitude range (defaults to LONRANGE)
     Returns:
@@ -83,7 +83,8 @@ def regrid(da,latrange=LATRANGE,lonrange=LONRANGE):
     
 def calc_es(t):
     '''
-    Purpose: Calculate saturation vapor pressure (eₛ) using Eqs. 17 and 18 from Huang J. (2018), J. Appl. Meteorol. Climatol.
+    Purpose: Calculate saturation vapor pressure (eₛ) using Eqs. 17 and 18 from Huang J. (2018), J. 
+    Appl. Meteorol. Climatol.
     Args:
     - t (xr.DataArray): temperature DataArray (K) 
     Returns:
@@ -136,7 +137,7 @@ def calc_thetae(p,t,q=None):
     - t (xr.DataArray): temperature DataArray (K)
     - q (xr.DataArray, optional): specific humidity DataArray (kg/kg); if None, saturated θₑ will be calculated
     Returns:
-    - xr.DataArray: (unsaturated or saturated) θₑ DataArray (K)
+    - xr.DataArray: unsaturated or saturated θₑ DataArray (K)
     '''
     if q is None:
         q = calc_qs(p,t)
@@ -152,15 +153,15 @@ def calc_thetae(p,t,q=None):
 
 def calc_quadrature_weights(refda,rearth=6.371e6):
     '''
-    Purpose: Compute ΔA Δp Δt quadrature weights for a 4D grid (lat, lon, lev, time). These weights ensure that 
-    a sum over grid points approximates a physical integral over space and time.
+    Purpose: Compute ΔA Δp Δt quadrature weights for a 4D grid.
     Args:
-    - refda (xr.DataArray): reference DataArray containing 'lat', 'lon', 'lev', and 'time' coordinates
+    - refda (xr.DataArray): reference DataArray containing 'lat', 'lon', 'lev', and 'time'
     - rearth (float): Earth's radius in meters (defaults to 6,371,000)
     Returns:
     - xr.DataArray: quadrature weights with dims ('lat', 'lon', 'lev', 'time')
     '''
-    refda = refda.transpose('lat','lon','lev','time')
+    dims  = ('lat','lon','lev','time')
+    refda = refda.transpose(*dims)
     lats  = refda.lat.values
     lons  = refda.lon.values
     levs  = refda.lev.values
@@ -184,9 +185,9 @@ def calc_quadrature_weights(refda,rearth=6.371e6):
     dlev  = spacing(levs)
     dtime = spacing(times)
     area  = ((rearth**2)*np.cos(np.deg2rad(lats))*dlat).reshape(lats.size,1)*dlon.reshape(1,lons.size)
-    weights = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size).astype(np.float32)
-    weightsda = xr.DataArray(weights,dims=('lat','lon','lev','time'),coords=dict(lat=refda.lat,lon=refda.lon,lev=refda.lev,time=refda.time))
-    return weightsda
+    quad  = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size).astype(np.float32)
+    da = xr.DataArray(quad,dims=dims,coords=dict(lat=refda.lat,lon=refda.lon,lev=refda.lev,time=refda.time))
+    return da
 
 def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     '''
@@ -194,8 +195,8 @@ def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     variable and global metadata.
     Args:
     - da (xr.DataArray): input DataArray
-    - shortname (str): variable name (abbreviation)
-    - longname (str): variable long name/description
+    - shortname (str): variable name
+    - longname (str): variable description
     - units (str): variable units
     - author (str): author name (defaults to AUTHOR)
     - email (str): author email (defaults to EMAIL)    
@@ -215,18 +216,18 @@ def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     if 'time' in ds.coords:
         ds.time.attrs = dict(long_name='Time')
     ds.attrs = dict(history=f'Created on {datetime.today().strftime("%Y-%m-%d")} by {author} ({email})')
-    logger.info(f'   {shortname}: {ds.nbytes*1e-9:.3f} GB')
+    logger.info(f'   {longname} size: {ds.nbytes*1e-9:.3f} GB')
     return ds
 
 def save(ds,timechunksize=2208,savedir=SAVEDIR):
     '''
-    Purpose: Save an xr.Dataset to a NetCDF file in the specified directory, then verify the write by reopening.
+    Purpose: Save an xr.Dataset to a NetCDF file, then verify by reopening.
     Args:
     - ds (xr.Dataset): Dataset to save
     - timechunksize (int): chunk size for the 'time' dimension (defaults to 2,208 for 3-month chunks)
     - savedir (str): output directory (defaults to SAVEDIR)
     Returns:
-    - bool: True if write and verification succeed, otherwise False
+    - bool: True if write and verification succeed, False otherwise
     '''
     os.makedirs(savedir,exist_ok=True)
     shortname = list(ds.data_vars)[0]
@@ -274,7 +275,7 @@ if __name__=='__main__':
     thetae     = calc_thetae(p,t,q)
     thetaestar = calc_thetae(p,t)
     logger.info('Calculating quadrature weights...')
-    quadweights = calc_quadrature_weights(t)
+    quad = calc_quadrature_weights(t)
     logger.info('Creating datasets...')
     dslist = [        
         dataset(t,'t','Air temperature','K'),
@@ -286,7 +287,7 @@ if __name__=='__main__':
         dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
         dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
         dataset(pr,'pr','Precipitation rate','mm/hr'),
-        dataset(quadweights,'quadweights','Quadrature integration weights','m² hPa hr')]
+        dataset(quad,'quad','Quadrature integration weights','m² hPa hr')]
     logger.info('Saving datasets...')
     for ds in dslist:
         save(ds)
