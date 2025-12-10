@@ -8,10 +8,10 @@ class NonparametricKernelLayer(torch.nn.Module):
         '''
         Purpose: Initialize free-form (non-parametric) kernels along selected dimensions.
         Args:
-        - nfieldvars (int): number of predictor fields in each patch
+        - nfieldvars (int): number of predictor fields
         - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
         - nkernels (int): number of kernels to learn per predictor field
-        - kernelconfig (dict[str,str]): mapping of dimension name to kernel type
+        - kernelconfig (dict[str,str]): kernel confugiration
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
@@ -23,9 +23,9 @@ class NonparametricKernelLayer(torch.nn.Module):
 
     def forward(self,patch,quadweights):
         '''
-        Purpose: Apply learned kernels to a batch of patches and compute kernel-integrated features.
+        Purpose: Apply learned free-form kernels to a batch of patches and compute kernel-integrated features.
         Args:
-        - patch (torch.Tensor): predictor patch data with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - quadweights (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
@@ -43,10 +43,10 @@ class ParametricKernelLayer(torch.nn.Module):
         '''
         Purpose: Initialize smooth parametric kernels along selected dimensions.
         Args:
-        - nfieldvars (int): number of predictor fields in each patch
+        - nfieldvars (int): number of predictor fields
         - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
         - nkernels (int): number of kernels to learn per predictor field
-        - kernelconfig (dict[str,str]): mapping of dimension name to kernel type ('gaussian' | 'exponential')
+        - kernelconfig (dict[str,str]): kernel configuration
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
@@ -88,7 +88,7 @@ class ParametricKernelLayer(torch.nn.Module):
         - coord (torch.Tensor): 1D coordinate tensor
         - logtau (torch.Tensor): log decay scale parameters with shape (nfieldvars, nkernels)
         Returns:
-        - torch.Tensor: expoenntial kernel values with shape (nfieldvars, nkernels, len(coord))
+        - torch.Tensor: exponential kernel values with shape (nfieldvars, nkernels, len(coord))
         '''
         tau = torch.exp(logtau)+1e-4
         return torch.exp(-coord[None,None,:]/tau[...,None])
@@ -97,7 +97,7 @@ class ParametricKernelLayer(torch.nn.Module):
         '''
         Purpose: Apply learned parametric kernels to a batch of patches and compute kernel-integrated features.
         Args:
-        - patch (torch.Tensor): predictor patch data with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - quadweights (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
@@ -111,9 +111,9 @@ class ParametricKernelLayer(torch.nn.Module):
             function = self.functions[dim]
             if function=='gaussian':
                 coord    = torch.linspace(-1.0,1.0,steps=length,device=device,dtype=dtype)
-                mu       = self.mu[dim].to(device=device,dtype=dtype)
-                logsigma = self.logsigma[dim].to(device=device,dtype=dtype)
-                kernel1D = self.gaussian(coord,mu,logsigma)
+                mean     = self.mean[dim].to(device=device,dtype=dtype)
+                logstd   = self.logstd[dim].to(device=device,dtype=dtype)
+                kernel1D = self.gaussian(coord,mean,logstd)
             elif function=='exponential':  
                 coord    = torch.arange(length,device=device,dtype=dtype)
                 logtau   = self.logtau[dim].to(device=device,dtype=dtype)
@@ -130,7 +130,7 @@ class MainNN(torch.nn.Module):
 
     def __init__(self,nfeatures):
         '''
-        Purpose: Initialize a feed-forward neural network that maps a flat feature vector to a scalar prediction.
+        Purpose: Initialize a feed-forward neural network that nonlinearly maps a feature vector to a scalar prediction.
         Args:
         - nfeatures (int): number of input features per sample (after any flattening, kernel integration, and/or concatenation)
         '''
@@ -160,9 +160,9 @@ class BaselineNN(torch.nn.Module):
         Purpose: Initialize a neural network that directly ingests space-height-time patches for one or more predictor 
         fields, then passes the patches plus optional local inputs to MainNN.
         Args:
-        - nfieldvars (int): number of predictor fields in each patch
+        - nfieldvars (int): number of predictor fields
         - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
-        - nlocalvars (int): number of local input variables
+        - nlocalvars (int): number of local inputs
         - uselocal (bool): whether to use local inputs
         '''
         super().__init__()
@@ -180,7 +180,7 @@ class BaselineNN(torch.nn.Module):
         '''
         Purpose: Forward pass through BaselineNN.
         Args:
-        - patch (torch.Tensor): predictor patch data with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
         - torch.Tensor: predictions with shape (nbatch, 1)
@@ -199,11 +199,11 @@ class KernelNN(torch.nn.Module):
 
     def __init__(self,kernellayer,nlocalvars,uselocal):
         '''
-        Purpose:Initialize a neural network that applies either non-parametric or parametric kernels over selected 
+        Purpose: Initialize a neural network that applies either non-parametric or parametric kernels over selected 
         dimensions of each predictor patch, then passes the resulting kernel features plus optional local inputs to MainNN.
         Args:
         - kernellayer (torch.nn.Module): instance of NonparametricKernelLayer or ParametricKernelLayer
-        - nlocalvars (int): number of local input variables
+        - nlocalvars (int): number of local inputs
         - uselocal (bool): whether to use local inputs
         '''
         super().__init__()
@@ -219,13 +219,13 @@ class KernelNN(torch.nn.Module):
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
 
-    def forward(self,patch,local=None,quadweights=None):
+    def forward(self,patch,quadweights,local=None):
         '''
         Purpose: Forward pass through KernelNN.
         Args:
-        - patch (torch.Tensor): predictor patch data with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
+        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - quadweights (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
+        - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
         - torch.Tensor: predictions with shape (nbatch, 1)
         '''

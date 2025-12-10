@@ -5,7 +5,7 @@ import json
 
 class Config:
 
-    def __init__(self, path='configs.json'):
+    def __init__(self,path='configs.json'):
         '''
         Purpose: Load configs.json and expose commonly used blocks/paths as attributes.
         '''
