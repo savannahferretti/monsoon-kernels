@@ -12,7 +12,7 @@ class PatchConfig:
         Purpose: Store patch configuration and infer patch shape/valid patch centers.
         Args:
         - radius (int): number of horizontal grid points to include on each side of the center point
-        - maxlevs (int): maximum number of vertical levels to include; if maxlevs ≥ total levels, use all levels
+        - maxlevs (int): maximum number of vertical levels to include; if 'maxlevs' ≥ total levels, use all levels
         - timelag (int): number of past time steps to include; if 0, use only the current time step (no time lag)
         '''
         self.radius = int(radius)
