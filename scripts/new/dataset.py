@@ -107,17 +107,16 @@ class SampleDataset(torch.utils.data.Dataset):
         levmin,levmax = 0,min(nlevs,self.patch.maxlevs)
         if self.patchconfig.timelag>0:
             timemin,timemax = max(0,timeidx-self.patchconfig.timelag),timeidx+1
-            patchlength  = timemax-timemin
-            neededlength = self.patchconfig.timelag+1
+            patchtimelength = timemax-timemin
+            neededlength    = self.patchconfig.timelag+1
         else:
-            timemin = timeidx
-            timemax = timeidx+1
-            patchlength = neededlength = 1
+            timemin,timemax = timeidx,timeidx+1
+            patchtimelength = neededlength = 1
         patch = self.field[:,latmin:latmax,lonmin:lonmax,levmin:levmax,timemin:timemax]
-        if patchlength<neededlength:
-            padlength = neededlength-patchlength
+        if patchtimelength<neededlength:
+            padlength = neededlength-patchtimelength
             padshape  = (patch.shape[0],patch.shape[1],patch.shape[2],patch.shape[3],padlength)
-            pad   = torch.zeros(padshape,dtype=self.fielddata.dtype)
+            pad   = torch.zeros(padshape,dtype=self.field.dtype)
             patch = torch.cat([pad,patch],dim=-1)
         sample = {
             'patch':patch,
@@ -125,3 +124,85 @@ class SampleDataset(torch.utils.data.Dataset):
         if self.uselocal and self.local is not None:
             sample['local'] = self.local[:,latidx,lonidx,timeidx]
         return sample
+
+class DataPrep:
+
+    @staticmethod
+    def prepare(splits,fieldvars,localvars,targetvar,fieldir):
+        '''
+        Purpose: Retrieve data splits as xr.Datasets, convert variable xr.DataArrays into to PyTorch tensors by data type, and extract quadrature weights and coordinates.
+        Args:
+        - splits (list[str]): list of splits to load (e.g., ['train', 'valid'])
+        - fieldvars (list[str]): predictor field variable names
+        - localvars (list[str]): local input variable names
+        - targetvar (str): target variable name
+        - filedir (str): directory containing split files
+        Returns:
+        - dict: dictionary with 'ds', 'field', 'local', 'target', and 'quadweights'
+        '''
+        result = {}
+        for split in splits:
+            filename = f'{split}.h5'
+            filepath = os.path.join(filedir,filename)
+            ds = xr.open_dataset(filepath,engine='h5netcdf')
+        fieldlist = []
+        for varname in fieldvars:
+            da  = ds[varname]
+            arr = da.values
+            fieldlist.append(arr)
+        if localvars:
+            locallist = []
+            for varname in localvars:
+                da  = ds[varname]
+                arr = da.values if 'time' in da.dims else np.broadcast_to(da.values[...,None],(da.values.shape[0],da.values.shape[1],ds.time.size))
+                locallist.append(arr)
+            local = torch.from_numpy(np.stack(locallist,axis=0))
+        else:
+            local = None
+            results[split] = {
+                'ds':ds,
+                'field':torch.from_numpy(np.stack(fieldlist,axis=0)),
+                'local':local,
+                'target':torch.from_numpy(ds[targetvar].values),
+                'quadweights':torch.from_numpy(ds['quadweights'].values),
+                'lats':ds.lat.values,
+                'lons':ds.lon.values}
+        return results
+
+    @staticmethod
+    def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device,nlevs):
+        '''
+        Purpose: Build PatchConfig, centers, SampleDatasets, and DataLoaders for given splits.
+        Args:
+        - splitdata (dict): dictionary from prepare_splits() containing tensors and coordinates
+        - patchconfig (dict): patch configuration from model config
+        - uselocal (bool): whether to use local inputs
+        - latrange (tuple[float,float]): latitude range for domain filtering
+        - lonrange (tuple[float,float]): longitude range for domain filtering
+        - batchsize (int): batch size for DataLoader
+        - workers (int): number of DataLoader workers
+        - device (str): device for training ('cuda' | 'cpu')
+        - nlevs (int): number of vertical levels
+        Returns:
+        - dict: dictionary with 'patch', 'patchshape', 'centers', 'datasets', 'loaders', and 'quadweights'
+        '''
+        patch        = PatchConfig(patchconfig['radius'],maxlevs=patchconfig['maxlevs'],patchconfig['timelag'])
+        patchshape   = patch.shape(nlevs)
+        commonkwargs = dict(num_workers=workers,pin_memory=(device=='cuda'),persistent_workers=(workers>0))
+        if workers>0:
+            commonkwargs['prefetch_factor'] = 2
+        centers  = {}
+        datasets = {}
+        loaders  = {}
+        quadweights = None
+        for split,data in splitdata.items():
+            centers[split]  = patch.centers(data['target'],data['lats'],data['lons'],latrange,lonrange)
+            datasets[split] = SampleDataset(data['field'],data['local'],data['target'],centers[split],patch,uselocal)
+            loaders[split]  = torch.util.data.DataLoader(datasets[splitname],batch_size=batchsize,shuffle=(split=='train'),**commonkwargs)
+        return {
+            'patch':patch,
+            'patchshape':patchshape,
+            'centers':centers,
+            'datasets':datasets,
+            'loaders':loaders,
+            'quadweights':quadweights}

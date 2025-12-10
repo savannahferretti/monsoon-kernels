@@ -161,25 +161,15 @@ def save_precip(arr, templateda, runname, splitname, resultsdir=RESULTSDIR):
         return False
 
 
-def parse_args():
+def parse():
     '''
     Purpose: Parse command-line arguments for evaluation script.
     Returns:
     - argparse.Namespace: parsed arguments
     '''
-    import argparse
     parser = argparse.ArgumentParser(description='Evaluate NN precipitation models.')
-    parser.add_argument(
-        '--models',
-        type=str,
-        default='all',
-        help='Comma-separated list of model names to evaluate (as in configs.json "models.name"), or "all".')
-    parser.add_argument(
-        '--split',
-        type=str,
-        required=True,
-        choices=['valid', 'test'],
-        help='Which split to evaluate.')
+    parser.add_argument('--models',type=str,default='all',help='Comma-separated list of model names to evaluate, or `all`.')
+    parser.add_argument('--split',type=str,required=True,choices=['valid','test'],help='Which split to evaluate (`valid` or `test`).')
     return parser.parse_args()
 
 

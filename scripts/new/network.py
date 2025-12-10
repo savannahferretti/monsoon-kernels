@@ -149,9 +149,9 @@ class MainNN(torch.nn.Module):
         Args:
         - X (torch.Tensor): input features with shape (nbatch, nfeatures)
         Returns:
-        - torch.Tensor: predictions with shape (nbatch, 1)
+        - torch.Tensor: predictions with shape (nbatch,)
         '''
-        return self.layers(X)
+        return self.layers(X).squeeze()
 
 class BaselineNN(torch.nn.Module):
 
@@ -183,7 +183,7 @@ class BaselineNN(torch.nn.Module):
         - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
-        - torch.Tensor: predictions with shape (nbatch, 1)
+        - torch.Tensor: predictions with shape (nbatch,)
         '''
         nbatch = patch.shape[0]
         patch  = patch.reshape(nbatch,-1)
@@ -227,7 +227,7 @@ class KernelNN(torch.nn.Module):
         - quadweights (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
         - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
-        - torch.Tensor: predictions with shape (nbatch, 1)
+        - torch.Tensor: predictions with shape (nbatch,)
         '''
         (plats,plons,plevs,ptimes),device,dtype = self.patchshape,patch.device,patch.dtype
         kernelfeatures = self.kernellayer(patch,quadweights)
