@@ -103,10 +103,10 @@ def save(ds,splitname,timechunksize=2208,savedir=SAVEDIR):
     Args:
     - ds (xr.Dataset): Dataset to save
     - splitname (str): 'train' | 'valid' | 'test'
-    - timechunksize (int): number of time steps to include for chunking (defaults to 2,208 for 3-month chunks)
+    - timechunksize (int): chunk size for the 'time' dimension (defaults to 2,208 for 3-month chunks)
     - savedir (str): output directory (defaults to SAVEDIR)
     Returns:
-    - bool: True if writing and verification succeed, False otherwise
+    - bool: True if write and verification succeed, False otherwise
     '''
     os.makedirs(savedir,exist_ok=True)
     filename = f'{splitname}.h5'
@@ -143,7 +143,7 @@ if __name__=='__main__':
     for splitname,splitrange in splits:
         splitds = split(splitrange)
         if splitname=='train':
-            stats = calc_save_stats(splitds)
-        ds = normalize(splitds,stats)
+            trainstats = stats(splitds)
+        ds = normalize(splitds,trainstats)
         save(ds,splitname)
         del ds

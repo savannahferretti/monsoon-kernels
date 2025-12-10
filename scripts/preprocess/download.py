@@ -93,7 +93,7 @@ def subset(da,radius=0,latrange=LATRANGE,lonrange=LONRANGE,levrange=LEVRANGE,yea
     Purpose: Subset an xr.DataArray by a horizontal domain, and, if present, by pressure levels and time.
     Args:
     - da (xr.DataArray): input DataArray
-    - radius (int): number of grid cells to include beyond domain bounds regridding (defaults to 0, 
+    - radius (int): number of grid cells to include beyond domain bounds for regridding (defaults to 0, 
       which disables the radius)
     - latrange (tuple[float,float]): latitude range (defaults to LATRANGE)
     - lonrange (tuple[float,float]): longitude range (defaults to LONRANGE)
