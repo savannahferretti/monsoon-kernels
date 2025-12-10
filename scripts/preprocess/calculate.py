@@ -185,8 +185,8 @@ def calc_quadrature_weights(refda,rearth=6.371e6):
     dlev  = spacing(levs)
     dtime = spacing(times)
     area  = ((rearth**2)*np.cos(np.deg2rad(lats))*dlat).reshape(lats.size,1)*dlon.reshape(1,lons.size)
-    quad  = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size).astype(np.float32)
-    da = xr.DataArray(quad,dims=dims,coords=dict(lat=refda.lat,lon=refda.lon,lev=refda.lev,time=refda.time))
+    quadweights = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size).astype(np.float32)
+    da = xr.DataArray(quadweights,dims=dims,coords=dict(lat=refda.lat,lon=refda.lon,lev=refda.lev,time=refda.time))
     return da
 
 def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
@@ -275,7 +275,7 @@ if __name__=='__main__':
     thetae     = calc_thetae(p,t,q)
     thetaestar = calc_thetae(p,t)
     logger.info('Calculating quadrature weights...')
-    quad = calc_quadrature_weights(t)
+    quadweights = calc_quadrature_weights(t)
     logger.info('Creating datasets...')
     dslist = [        
         dataset(t,'t','Air temperature','K'),
@@ -287,7 +287,7 @@ if __name__=='__main__':
         dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
         dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
         dataset(pr,'pr','Precipitation rate','mm/hr'),
-        dataset(quad,'quad','Quadrature integration weights','m² hPa hr')]
+        dataset(quadweights,'quadweights','Quadrature integration weights','m² hPa hr')]
     logger.info('Saving datasets...')
     for ds in dslist:
         save(ds)

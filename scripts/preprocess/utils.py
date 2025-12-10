@@ -3,10 +3,11 @@
 import json 
 
 class Config: 
-    '''
-    Purpose: Load configs.json and expose commonly used blocks/paths as attributes.
-    ''' 
+
     def __init__(self,path='configs.json'): 
+        '''
+        Purpose: Load configs.json and expose commonly used blocks/paths as attributes.
+        '''
         with open(path,'r',encoding='utf-8') as f: 
             config = json.load(f) 
             self.paths  = config['paths'] 
