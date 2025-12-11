@@ -105,8 +105,7 @@ class KernelNN(torch.nn.Module):
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
-        (plats,plons,plevs,ptimes),device,dtype = self.patchshape,patch.device,patch.dtype
-        kernelfeatures = self.kernellayer(patch,quad)
+        kernelfeatures = self.kernellayer(quad)
         if self.uselocal:
             if local is None:
                 raise ValueError('`local` must be provided when `uselocal` is True')

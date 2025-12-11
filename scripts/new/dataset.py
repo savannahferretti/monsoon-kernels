@@ -139,11 +139,11 @@ class DataModule:
         Returns:
         - dict[str,dict]: < put something here>
         '''
-        result = {}
-        for split in splits:
-            filename = f'{split}.h5'
-            filepath = os.path.join(filedir,filename)
-            ds = xr.open_dataset(filepath,engine='h5netcdf')
+    result = {}
+    for split in splits:
+        filename = f'{split}.h5'
+        filepath = os.path.join(filedir,filename)
+        ds = xr.open_dataset(filepath,engine='h5netcdf')
         fieldlist = []
         for varname in fieldvars:
             da  = ds[varname]
@@ -161,15 +161,15 @@ class DataModule:
             local = None
         target = torch.from_numpy(ds[targetvar].values)
         quad   = torch.from_numpy(ds['quad'].values)
-            results[split] = {
-                'ds':ds,
-                'field':field,
-                'local':local,
-                'target':target,
-                'quad':quad,
-                'lats':ds.lat.values,
-                'lons':ds.lon.values}
-        return results
+        result[split] = { 
+            'ds':ds,
+            'field':field,
+            'local':local,
+            'target':target,
+            'quad':quad,
+            'lats':ds.lat.values,
+            'lons':ds.lon.values}
+        return result  
 
     @staticmethod
     def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device):
@@ -198,7 +198,7 @@ class DataModule:
         for split,data in splitdata.items():
             centers[split]  = geometry.centers(data['target'],data['lats'],data['lons'],latrange,lonrange)
             datasets[split] = PatchDataset(data['field'],data['local'],data['target'],centers[split],geometry,uselocal)
-            loaders[split]  = torch.util.data.DataLoader(datasets[split],batch_size=batchsize,shuffle=(split=='train'),**commonkwargs)
+            loaders[split]  = torch.utils.data.DataLoader(datasets[split],batch_size=batchsize,shuffle=(split=='train'),**commonkwargs)
             if quad is None:
                 quad = data['quad']
         return {

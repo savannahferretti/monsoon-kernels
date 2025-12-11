@@ -9,7 +9,7 @@ import numpy as np
 import xarray as xr
 from utils import Config
 from dataset import DataModule
-from network import BaselineNN,KernelNN
+from models import BaselineNN,KernelNN
 from kernels import NonparametricKernelLayer,ParametricKernelLayer
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
@@ -18,13 +18,14 @@ logger = logging.getLogger(__name__)
 config = Config()
 SPLITDIR       = config.splitdir
 MODELDIR       = config.modeldir
-PREDICTIONDIR  = config.predictiondir
+PREDICTIONSDIR = config.predictionsdir
 FEATUREDIR     = config.featuredir
 FIELDVARS      = config.fieldvars
 LOCALVARS      = config.localvars
 TARGETVAR      = config.targetvar
 LATRANGE       = config.latrange
 LONRANGE       = config.lonrange
+SEED           = config.seed
 WORKERS        = config.workers
 BATCHSIZE      = config.batchsize
 CRITERION      = config.criterion
