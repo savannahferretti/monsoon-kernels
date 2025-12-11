@@ -129,8 +129,7 @@ class DataModule:
     @staticmethod
     def prepare(splits,fieldvars,localvars,targetvar,filedir):
         '''
-        Purpose: Retrieve data splits as xr.Datasets, convert variable xr.DataArrays into to PyTorch tensors by data type, 
-        and extract quadrature weights and coordinates.
+        Purpose: Convert variable xr.DataArrays into PyTorch tensors by data type and extract quadrature weights and coordinates.
         Args:
         - splits (list[str]): list of splits to load
         - fieldvars (list[str]): predictor field variable names

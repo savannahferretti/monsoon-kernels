@@ -70,7 +70,7 @@ def inference(model,split,result,uselocal,device):
     Returns:
     - xr.DataArray: predicted precipitation DataArray
     '''
-    dataloader = result['loader'][split]
+    dataloader = result['loaders'][split]
     model.eval()
     outputslist  = []
     featureslist = []
@@ -100,9 +100,9 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
     - nkernels (int | None): number of learned kernels or None
     - kerneldims (list[str] | tuple[str] | None): dimensions along which the kernel varies for reconstructing weights or None
     - nonparam (bool): whether the kernel is non-parametric
-    - fieldvars (list[str]): predictor variable names(defaults to FIELDVARS)
+    - fieldvars (list[str]): predictor variable names (defaults to FIELDVARS)
     Returns:
-    - xr.Dataset: Datset of predictions, features, or weights
+    - xr.Dataset: Dataset of predictions, features, or weights
     '''
     if kind=='predictions':
         if refda is None or centers is None:

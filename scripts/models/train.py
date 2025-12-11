@@ -170,7 +170,7 @@ def fit(name,model,kind,result,uselocal,device,
         'Training duration (s)':duration,
         'Stopped early':noimprove>=patience})
     if beststate is not None:
-        save(beststate,name,kind)
+        save(beststate,name,kind,modeldir)
     wandb.finish()
 
 def parse():
