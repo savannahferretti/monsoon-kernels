@@ -110,6 +110,44 @@ def save(arr,refda,name,split,savedir=PREDICTIONDIR):
         logger.exception('      Failed to save or verify')
         return False
 
+
+
+    def save(self,item,name,savedir):
+        '''
+        Purpose: Save kernel weights or kernel-integrated features to a NumPy zip archive then verify by reopening.
+        Args:
+        - item (np.ndarray | dict): either kernel-integrated features with shape (nsamples, nfieldvars*nkernels)
+          or dictionary returned by weights()
+        - name (str): model name
+        - savedir (str): output directory
+        Returns:
+        - bool: True if save and verification successful, False otherwise
+        '''
+        os.makedirs(savedir,exist_ok=True)
+        filename = f'{name}_kernel_features.npz' if isinstance(item,np.ndarray) else f'{name}_kernel_weights.npz'
+        filepath = os.path.join(savedir,filename)
+        logger.info(f'   Attempting to save {filename}...')
+        try:
+            if isinstance(item,np.ndarray):
+                np.savez(filepath,item)
+            else:
+                arrs = {}
+                for key,value in item.items():
+                    if isinstance(value,dict):
+                        for subkey,subvalue in value.items():
+                            arrs[f'{key}_{subkey}'] = subvalue
+                    else:
+                        arrs[key] = value
+                np.savez(filepath,**arrs)
+            with np.load(filepath) as _:
+                pass
+                logger.info('      File write successful')
+                return True
+            except Exception:
+                logger.exception('      Failed to save or verify')
+                return False
+
+
 def parse():
     '''
     Purpose: Parse command-line arguments for running the evaluation script.
