@@ -32,25 +32,25 @@ BATCHSIZE  = config.batchsize
     
 def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,modeldir=MODELDIR):
     '''
-    Purpose: Initialize a model instance from ModelFactory.build() and populate with weights from from a saved checkpoint.
+    Purpose: Initialize a model instance from ModelFactory.build() and populate with weights from a saved checkpoint.
     Args:
     - name (str): model name
     - modelconfig (dict): model configuration
     - result (dict[str,object]): dictionary from DataModule.dataloaders()
     - device (str): device to use ('cpu' | 'cuda')
-    - fieldvars (int): predictor field variable names (defaults to FIELDVARS)
-    - localvars (int): local input variable names (defaults to LOCALVARS)
+    - fieldvars (list[str]): predictor field variable names (defaults to FIELDVARS)
+    - localvars (list[str]): local input variable names (defaults to LOCALVARS)
     - modeldir (str): directory containing checkpoints (defaults to MODELDIR)
     Returns:
     - torch.nn.Module: model with loaded state_dict on 'device' or None if checkpoint not found
     '''
-    filedir  = os.path.join(modeldir,kind)
+    filedir  = os.path.join(modeldir,modelconfig['kind'])
     filename = f'{name}.pth'
     filepath = os.path.join(filedir,filename)
     if not os.path.exists(filepath):
         logger.error(f'   Checkpoint not found: {filepath}')
         return None
-    patchshape = result['geometry'].shape
+    patchshape = result['geometry'].shape()
     nfieldvars = len(fieldvars)
     nlocalvars = len(localvars)
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
@@ -79,7 +79,7 @@ def inference(model,result,uselocal,device):
             local = batch['local'].to(device) if uselocal else None
             if hasattr(model,'kernellayer'):
                 quad = result['quad'].to(device)
-                output,feature = model(patch,quad,local,returnfeatures=True)
+                output,feature = model(patch,quad,local,getfeatures=True)
                 featureslist.append(feature.cpu().numpy())
             else:
                 output = model(patch,local)
@@ -134,7 +134,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
                 arr[:,:,latidx,lonidx,timidx] = data[i].transpose(1,0)
             for fieldidx,varname in enumerate(fieldvars):
                 da = xr.DataArray(arr[:,fieldidx,...],dims=('member',)+refda.dims,coords={'member':np.arange(nkernels),**refda.coords},name=varname)
-                da.attrs(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
+                da.attrs = dict(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
                 ds[da.name] = da
         else:
             data = data[...,0]
@@ -143,7 +143,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
                 arr[:,latidx,lonidx,timidx] = data[i]
             for fieldidx,varname in enumerate(fieldvars):
                 da = xr.DataArray(arr[fieldidx,...],refda.dims,coords=refda.coords,name=varname)
-                da.attrs(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
+                da.attrs = dict(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
                 ds[da.name] = da
         return ds    
     elif kind=='weights':
@@ -230,7 +230,7 @@ if __name__=='__main__':
     cachedresult = None
     for name,modelconfig in config.models.items():
         name = modelconfig['name']
-        if name not in models:
+        if models is not None and name not in models
             continue
         logger.info(f'Running {name}...')
         patchconfig   = modelconfig['patch']
@@ -245,9 +245,9 @@ if __name__=='__main__':
             cachedconfig = currentconfig
             cachedresult = result
         logger.info('   Initializing model and populating trained weights....')
-        model = load(name,modelconfig,result,uselocal,device)
+        model = load(name,modelconfig,result,device)
         logger.info('   Starting inference....')
-        predictions,features = inference(model,result,device)
+        predictions,features = inference(model,result,uselocal,device)
         logger.info('Saving outputs...')
         centers   = result['centers'][split]
         refda     = splitdata[split]['ds'][TARGETVAR]

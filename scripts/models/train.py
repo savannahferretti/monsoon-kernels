@@ -46,7 +46,7 @@ def initialize(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCA
     Returns:
     - torch.nn.Module: initialized model instance on 'device'
     '''
-    patchshape = result['geometry'].shape
+    patchshape = result['geometry'].shape()
     nfieldvars = len(fieldvars)
     nlocalvars = len(localvars)
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
@@ -203,7 +203,7 @@ if __name__=='__main__':
     for name,modelconfig in config.models.items():
         name = modelconfig['name']
         kind = modelconfig['kind']
-        if name not in models:
+        if models is not None and name not in models:
             continue
         logger.info(f'Running `{name}`...')
         patchconfig   = modelconfig['patch']

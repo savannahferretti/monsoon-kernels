@@ -173,7 +173,7 @@ class DataModule:
                 'quad':quad,
                 'lats':ds.lat.values,
                 'lons':ds.lon.values}
-            return result  
+        return result  
 
     @staticmethod
     def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device):

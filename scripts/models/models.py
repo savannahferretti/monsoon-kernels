@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import torch
+from kernels import NonparametricKernelLayer,ParametricKernelLayer
 
 class MainNN(torch.nn.Module):
 
