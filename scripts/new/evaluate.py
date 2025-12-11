@@ -2,14 +2,15 @@
 
 import os
 import torch
+import wandb
 import logging
 import argparse
 import numpy as np
 import xarray as xr
 from utils import Config
-from dataset import DataPrep
-from datetime import datetime
-from network import NonparametricKernelLayer,ParametricKernelLayer,BaselineNN,KernelNN
+from dataset import DataModule
+from network import BaselineNN,KernelNN
+from kernels import NonparametricKernelLayer,ParametricKernelLayer
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -28,25 +29,25 @@ WORKERS        = config.workers
 BATCHSIZE      = config.batchsize
 CRITERION      = config.criterion
 
-def load(name,modeldir=MODELDIR):
+def load(name,nfieldvars,ncolcalvars,modeldir=MODELDIR):
     '''
     Purpose: Load a trained model.
     Args:
-    - model (torch.nn.Module): trained model instance
+    - modelinstance (trch.nn.Moduke): 
     - name (str): model name
     - modeldir (str): directory containing checkpoints (defaults to MODELDIR)
     Returns:
-    - bool: True if checkpoint loaded successfully, False otherwise
+    - torch.nn.Module: model with loaded state_dict
     '''
     filename = f'{name}.pth'
     filepath = os.path.join(modeldir,filename)
     if not os.path.exists(filepath):
         logger.error(f'   Checkpoint not found: {filepath}')
         return False
+    model = BaselineNN(nfieldvars,nlocalvars) if 'baseline' in name else KernelNN(nfieldvars,nlocalvars)
     state = torch.load(filepath,map_location='cpu')
     model.load_state_dict(state)
-    logger.info(f'   Loaded checkpoint from {filename}')
-    return True
+    return model
 
 def inference(model,loader,centers,targettemplate,quadweights,device=DEVICE,ampeneabled=AMPENABLED):
     '''
@@ -159,14 +160,13 @@ def parse():
     parser.add_argument('--split',type=str,required=True,choices=['valid','test'],help='Which split to evaluate (`valid` or `test`).')
     return parser.parse_args()
     
-if __name__ == '__main__':
+if __name__=='__main__':
     logger.info('Setting random seed...')
     torch.manual_seed(SEED)
     np.random.seed(SEED)
     logger.info('Determining device type...')
-    DEVICE     = 'cuda' if torch.cuda.is_available() else 'cpu'
-    AMPENABLED = (DEVICE=='cuda')
-    if AMPENABLED:
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device=='cuda':
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         torch.set_float32_matmul_precision('high')
@@ -174,25 +174,41 @@ if __name__ == '__main__':
     args   = parse()
     models = [m.strip() for m in args.models.split(',')] if args.models!='all' else None
     split  = args.split
-    logger.info(f'Loading {split if split=='test' else 'validation'} split...')
-    splitdata = DataPrep.prepare(FILEDIR,FIELDVARS,LOCALVARS,TARGETVAR,[split])
+    logger.info('Preparing evaluation split...')
+    splitdata    = DataModule.prepare(['train','valid'],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
     cachedconfig = None
     cachedresult = None
-    for modelconfig in MODELCONFIGS:
+    for name,modelconfig in config.models.items():
         name = modelconfig['name']
-        if (models is not None) and (name not in requested):
+        if name not in models:
             continue
         logger.info(f'Evaluating {name}...')
         patchconfig = modelconfig['patch']
-        uselocal    = modelconfig.get('uselocal',True)
+        uselocal    = modelconfig['uselocal']
+        logger.info('   Building data loaders....')
         currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
         if currentconfig==cachedconfig:
-            logger.info('   Reusing cached dataset and loader')
+            logger.info('   Reusing cached datasets and loaders...')
             result = cachedresult
         else:
-            result = DataPrep.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,DEVICE,splitdata[split]['ds'].lev.size)
+            result = DataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)
             cachedconfig = currentconfig
             cachedresult = result
-        model = load(name)
-        arr = inference(model,result['loaders'][split],result['centers'][split],splitdata[split]['target'],result['quadweights'],DEVICE)
-        save(arr,splitdata[split]['ds'][TARGETVAR],name,split)
+        logger.info('   Initializing model....')
+        nfieldvars = len(NFIELDVARS)
+        nlocalvars = len(LOCALVARS)        
+        model = load(name,nfieldvars,nlocalvars).to(device)
+        logger.info('   Starting inference....')
+        evalloader = data['loaders'][split]
+        centers    = result['centers'][split]
+        target     = splitdata[split]['target']
+        quad       = data['quad']       
+        refda = splitdata[split]['ds'][TARGETVAR]
+        arr = inference(model,evalloader,centers,target,quad,device)
+        save(arr,refda,name,split)
+        logger.info('Extracting weights and features...')
+        weights = KernelNN.weights()
+        save(weights,name)
+        features = 
+        save(features,name)
+        del model,arr,

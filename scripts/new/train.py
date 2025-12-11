@@ -2,10 +2,13 @@
 
 import os
 import torch
+import wandb
 import logging
+import argparse
 from utils import Config
-from dataset import DataPrep
-from network import NonparametricKernelLayer,ParametricKernelLayer,BaselineNN,KernelNN
+from dataset import DataModule
+from network import BaselineNN,KernelNN
+from kernels import NonparametricKernelLayer,ParametricKernelLayer
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -18,6 +21,7 @@ LOCALVARS = config.localvars
 TARGETVAR = config.targetvar
 LATRANGE  = config.latrange
 LONRANGE  = config.lonrange
+PROJECT   = config.project
 SEED      = config.seed
 WORKERS   = config.workers
 EPOCHS    = config.epochs
@@ -26,7 +30,7 @@ LR        = config.learningrate
 PATIENCE  = config.patience
 CRITERION = config.criterion
 
-def build(name,modelconfig,nfieldvars,nlocalvars,patchshape):
+def build(name,modelconfig,nfieldvars,nlocalvars):
     '''
     Purpose: Build a model instance from configuration.
     Args:
@@ -34,7 +38,6 @@ def build(name,modelconfig,nfieldvars,nlocalvars,patchshape):
     - modelconfig (dict): model configuration
     - nfieldvars (int): number of predictor fields
     - nlocalvars (int): number of local inputs
-    - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
     Returns:
     - torch.nn.Module: initialized model
     '''
@@ -43,135 +46,178 @@ def build(name,modelconfig,nfieldvars,nlocalvars,patchshape):
     if modeltype=='baseline':
         model = BaselineNN(nfieldvars,patchshape,nlocalvars,uselocal)
     elif modeltype=='nonparametric':
-        nkernels     = modelconfig['nkernels']
-        kernelconfig = modelconfig['kernelconfig']
-        kernellayer  = NonparametricKernelLayer(nfieldvars,patchshape,nkernels,kernelconfig)
+        nkernels    = modelconfig['nkernels']
+        kerneldims  = modelconfig['kerneldims']
+        kernellayer = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims)
         model = KernelNN(kernellayer,nlocalvars,uselocal)
     elif modeltype=='parametric':
-        nkernels     = modelconfig['nkernels']
-        kernelconfig = modelconfig['kernelconfig']
-        kernellayer  = ParametricKernelLayer(nfieldvars,patchshape,nkernels,kernelconfig)
+        nkernels    = modelconfig['nkernels']
+        kerneldict  = modelconfig['kerneldict']
+        kernellayer = ParametricKernelLayer(nfieldvars,nkernels,kernelconfig)
         model = KernelNN(kernellayer,nlocalvars,uselocal)
-    else:
-        raise ValueError(f'Unknown model type `{modeltype}`')
-    logger.info(f'   Built {name} model with {sum(p.numel() for p in model.parameters())} parameters')
+    model.nparams = sum(param.numel() for param in model.parameters())
     return model
 
-
-
-def train_model(modelname,model,trainloader,validloader,device,uselocal,quadweights,
-                epochs=EPOCHS,lr=LR,patience=PATIENCE,criterion=CRITERION,modeldir=MODELDIR):
+def save(state,name,modeldir=MODELDIR):
     '''
-    Purpose: Train a model with early stopping and save the best checkpoint.
+    Purpose: Save best (lowest validation loss) model checkpoint, then verify by reopening.
     Args:
-    - modelname (str): name of the model
-    - model (torch.nn.Module): model to train
-    - trainloader (DataLoader): training data loader
-    - validloader (DataLoader): validation data loader
-    - device (str): device to use
-    - uselocal (bool): whether to use local inputs
-    - quadweights (torch.Tensor | None): quadrature weights for kernel models
-    - epochs (int): maximum number of epochs (defaults to EPOCHS)
-    - lr (float): learning rate (defaults to LR)
-    - patience (int): early stopping patience (defaults to PATIENCE)
-    - criterion (str): loss function name (defaults to CRITERION)
-    - modeldir (str): directory to save model checkpoints (defaults to MODELDIR)
-    Returns:
-    - torch.nn.Module: best model
-    '''
-    os.makedirs(modeldir,exist_ok=True)
-    if criterion=='mse':
-        criterion_fn = torch.nn.MSELoss()
-    elif criterion=='mae':
-        criterion_fn = torch.nn.L1Loss()
-    else:
-        raise ValueError(f'Unknown criterion: {criterion}')
-    optimizer = torch.optim.Adam(model.parameters(),lr=lr)
-    bestloss = float('inf')
-    counter  = 0
-    for epoch in range(epochs):
-        model.train()
-        totalloss = 0.0
-        for batch in loader:
-            patch  = batch['patch'].to(device)
-            target = batch['target'].to(device)
-            local  = batch.get('local').to(device) if uselocal else None
-            optimizer.zero_grad()
-            if quadweights is not None:
-                output = model(patch,local,quadweights.to(device))
-            else:
-                output = model(patch,local)
-            loss = criterion(output,target)
-            loss.backward()
-            optimizer.step()
-            totalloss += loss.item()*len(target)
-        trainloss =  totalloss/len(loader.dataset)
-        model.eval()
-        totalloss = 0.0
-        with torch.no_grad():
-            for batch in loader:
-                patch  = batch['patch'].to(device)
-                target = batch['target'].to(device)
-                local  = batch.get('local').to(device) if uselocal else None
-                if quadweights is not None:
-                    output = model(patch,local,quadweights.to(device))
-                else:
-                    output = model(patch,local)
-                loss = criterion(output,target)
-                totalloss += loss.item()*len(target)
-        validloss = totalloss/len(loader.dataset)
-        logger.info(f'   Epoch {epoch+1:2d}/{epochs}: train={trainloss:.6f}, valid={validloss:.6f}')
-        if validloss<bestloss:
-            bestloss = validloss
-            counter  = 0
-            filename = f'{name}.pth'
-            filepath = os.path.join(modeldir,filename)
-            torch.save(model.state_dict(),filepath)
-            logger.info(f'      Saved best model to {filename}')
-        else:
-            counter += 1
-            if counter>=patience:
-                logger.info(f'      Early stopping at epoch {epoch+1}')
-                break
-    model.load_state_dict(torch.load(os.path.join(modeldir,f'{modelname}.pt')))
-    return model
-
-
-def save(modelstate,name,modeldir=MODELDIR):
-    '''
-    Purpose: Save best (lowest validation loss) checkpoint for a run.
-    Args:
-    - modelstate (dict): model state dictionary
-    - runname (str): model run name
-    - modeldir (str): directory to save checkpoints (defaults to MODELDIR)
+    - state (dict): model.state_dict() to save
+    - runname (str): model name
+    - modeldir (str): output directory (defaults to MODELDIR)
     Returns:
     - bool: True if save successful, False otherwise
     '''
     os.makedirs(modeldir,exist_ok=True)
     filename = f'{name}.pth'
-    filepath = os.path.join(modeldir, filename)
-    logger.info(f'   Attempting to save {filename}...')
+    filepath = os.path.join(modeldir,filename)
+    logger.info(f'      Attempting to save {filename}...')
     try:
-        torch.save(modelstate,filepath)
+        torch.save(state,filepath)
         _ = torch.load(filepath,map_location='cpu')
-        logger.info('      File write successful')
+        logger.info('         File write successful')
         return True
     except Exception:
-        logger.exception('      Failed to save or verify')
+        logger.exception('         Failed to save or verify')
         return False
 
+def fit(name,model,trainloader,validloader,device,uselocal,quad,project=PROJECT,lr=LR,patience=PATIENCE,criterion=CRITERION,epochs=EPOCHS,modeldir=MODELDIR):
+    '''
+    Purpose: Train a model with early stopping and learning rate scheduling, then save the best checkpoint.
+    Args:
+    - name (str): model name
+    - model (torch.nn.Module): initialized model instance
+    - trainloader (DataLoader): training data loader
+    - validloader (DataLoader): validation data loader
+    - device (str): device to use
+    - uselocal (bool): whether to use local inputs
+    - quad (torch.Tensor | None): quadrature weights for kernel models or None
+    - project (str): project name for Weights & Biases logging
+    - lr (float): learning rate (defaults to LR)
+    - patience (int): early stopping patience (defaults to PATIENCE)
+    - criterion (str): loss function name (defaults to CRITERION)
+    - epochs (int): maximum number of epochs (defaults to EPOCHS)
+    - modeldir (str): directory to save model checkpoints (defaults to MODELDIR)
+    '''
+    model = model.to(device)
+    quad  = quad.to(device) if quad is not None else None
+    optimizer = torch.optim.Adam(model.parameters(),lr=lr)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,max_lr=lr,epochs=epochs,steps_per_epoch=len(trainloader),pct_start=0.2,anneal_strategy='cos',div_factor=10,final_div_factor=100)
+    wandb.init(project=project,name=name,
+               config={
+                   'Epochs':epochs,
+                   'Batch size':batchsize,
+                   'Initial learning rate':learningrate,
+                   'Early stopping patience':patience,
+                   'Loss function':criterion,
+                   'Number of parameters':model.nparams,
+                   'Device':device})
+    criterion = getattr(torch.nn,criterion)()
+    beststate = None
+    bestloss  = float('inf')
+    bestepoch = 0
+    noimprove = 0
+    starttime = time.time()
+    for epoch in range(1,epochs+1):
+        model.train()
+        totalloss = 0.0
+        for batch in trainloader:
+            patch  = batch['patch'].to(device)
+            target = batch['target'].to(device)
+            local  = batch['local'].to(device) if uselocal else None
+            optimizer.zero_grad()
+            output = model(patch,local,quad) if quad is not None else model(patch,local)
+            loss   = criterion(output,target)
+            loss.backward()
+            optimizer.step()
+            totalloss += loss.item()*len(target)
+        trainloss = totalloss/len(trainloader.dataset)
+        model.eval()
+        totalloss = 0.0
+        with torch.no_grad():
+            for batch in validloader:
+                patch  = batch['patch'].to(device)
+                target = batch['target'].to(device)
+                local  = batch['local'].to(device) if uselocal else None
+                output = model(patch,local,quad) if quad is not None else model(patch,local)
+                loss   = criterion(output,target)
+                totalloss += loss.item()*len(target)
+        validloss = totalloss/len(validloader.dataset)
+        if validloss<bestloss:
+            bestloss  = validloss
+            bestepoch = epoch
+            noimprove = 0
+            beststate = {key:value.detach().cpu().clone() for key,value in model.state_dict().items()}
+        else:
+            noimprove += 1
+        wandb.log({
+            'Epoch':epoch,
+            'Training loss':trainloss,
+            'Validation loss':validloss,
+            'Learning rate':optimizer.param_groups[0]['lr']})
+        if noimprove>=patience:
+            break
+    duration = time.time()-starttime
+    wandb.run.summary.update({
+        'Best model at epoch':bestepoch,
+        'Best validation loss':bestloss,
+        'Training duration (s)':duration,
+        'Stopped early':noimprove>=patience})
+    if beststate is not None:
+        save(beststate,name)
+    wandb.finish()
+
+def parse():
+    '''
+    Purpose: Parse command-line arguments for running the training script.
+    Returns:
+    - argparse.Namespace: parsed arguments
+    '''
+    parser = argparse.ArgumentParser(description='Train and validate NN precipitation models.')
+    parser.add_argument('--models',type=str,default='all',help='Comma-separated list of model names to evaluate, or `all`.')
+    return parser.parse_args()
+    
 if __name__=='__main__':
+    logger.info('Setting random seed...')
     torch.manual_seed(SEED)
+    np.random.seed(SEED)
+    logger.info('Determining device type...')
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    logger.info(f'Training selected NN models on {device}')
+    if device=='cuda':
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.set_float32_matmul_precision('high')
+    logger.info('Parsing arguments...')
+    args   = parse()
+    models = [m.strip() for m in args.models.split(',')] if args.models!='all' else None
     logger.info('Preparing data splits...')
-    splitdata  = DataPrep.prepare(SPLITDIR,FIELDVARS,LOCALVARS,TARGETVAR,['train','valid'])
+    splitdata    = DataModule.prepare(['train','valid'],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
+    cachedconfig = None
+    cachedresult = None
     for name,modelconfig in config.models.items():
-        logger.info(f'Training {model}...')
-        patchconfig = modelconfig['patchconfig']
+        name = modelconfig['name']
+        if name not in models:
+            continue
+        logger.info(f'Running `{name}`...')
+        patchconfig = modelconfig['patch']
         uselocal    = modelconfig['uselocal']
-        data  = DataPrep.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,splitdata['train']['field'].shape[3])
-        model = build(name,modelconfig,len(FIELDVARS),len(LOCALVARS),data['patchshape']).to(device)
-        qweights = data['quadweights'] if hasattr(model,'kernellayer') else None
-        model = fit(name,model,data['loaders']['train'],data['loaders']['valid'],device,uselocal,quadweights)
-        logger.info(f'Finished training {modelname}')
+        logger.info('   Building data loaders....')
+        currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
+        if currentconfig==cachedconfig:
+            logger.info('   Reusing cached datasets and loaders...')
+            result = cachedresult
+        else:
+            result = DataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)
+            cachedconfig = currentconfig
+            cachedresult = result
+        logger.info('   Initializing model....')
+        nfieldvars = len(NFIELDVARS)
+        nlocalvars = len(LOCALVARS)
+        model = build(name,modelconfig,nfieldvars,nlocalvars).to(device)
+        logger.info('   Starting training....')
+        trainloader = data['loaders']['train']
+        validloader = data['loaders']['valid']
+        quad        = data['quad']
+        fit(name,model,trainloader,validloader,device,uselocal,quad)
+        del model

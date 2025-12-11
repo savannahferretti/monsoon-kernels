@@ -12,6 +12,7 @@
     "latrange":[5.0,25.0],
     "lonrange":[60.0,90.0]},
   "training":{
+    "project":"Chapter 3 Experiments",
     "seed":42,
     "workers":8,
     "epochs":20,

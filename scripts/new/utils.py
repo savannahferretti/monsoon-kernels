@@ -55,6 +55,10 @@ class Config:
         return float(lonmin),float(lonmax)
 
     @property
+    def project(self):
+        return self.training['project']
+        
+    @property
     def seed(self):
         return int(self.training['seed'])
 

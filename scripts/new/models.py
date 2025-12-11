@@ -94,19 +94,19 @@ class KernelNN(torch.nn.Module):
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
 
-    def forward(self,patch,quadweights,local=None,returnfeatures=False):
+    def forward(self,patch,quad,local=None,returnfeatures=False):
         '''
         Purpose: Forward pass through KernelNN.
         Args:
         - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - quadweights (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
+        - quad (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
         - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         - returnfeatures (bool): if True, return kernel-integrated features
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
         (plats,plons,plevs,ptimes),device,dtype = self.patchshape,patch.device,patch.dtype
-        kernelfeatures = self.kernellayer(patch,quadweights)
+        kernelfeatures = self.kernellayer(patch,quad)
         if self.uselocal:
             if local is None:
                 raise ValueError('`local` must be provided when `uselocal` is True')
