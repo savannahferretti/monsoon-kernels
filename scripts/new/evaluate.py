@@ -9,7 +9,7 @@ import numpy as np
 import xarray as xr
 from utils import Config
 from dataset import DataModule
-from models import BaselineNN,KernelNN
+from models import BaselineNN,KernelNN,ModelFactory
 from kernels import NonparametricKernelLayer,ParametricKernelLayer
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
@@ -28,83 +28,78 @@ LONRANGE       = config.lonrange
 SEED           = config.seed
 WORKERS        = config.workers
 BATCHSIZE      = config.batchsize
-CRITERION      = config.criterion
 
-def load(name,nfieldvars,ncolcalvars,modeldir=MODELDIR):
+def load(name,nfieldvars,ncolcalvars,modelconfig,modeldir=MODELDIR):
     '''
-    Purpose: Load a trained model.
+    Purpose: Load a trained model from checkpoint.
     Args:
-    - modelinstance (trch.nn.Moduke): 
     - name (str): model name
+    - nfieldvars (int): number of predictor fields
+    - patchshape (?): (plats, plons, plevs, ptimes)
+    - nlocalvars (int): number of local inputs
+    - modelconfig (dict): model configuration
     - modeldir (str): directory containing checkpoints (defaults to MODELDIR)
     Returns:
-    - torch.nn.Module: model with loaded state_dict
+    - torch.nn.Module: model with loaded state_dict or None if checkpoint not found
     '''
     filename = f'{name}.pth'
     filepath = os.path.join(modeldir,filename)
     if not os.path.exists(filepath):
         logger.error(f'   Checkpoint not found: {filepath}')
-        return False
-    model = BaselineNN(nfieldvars,nlocalvars) if 'baseline' in name else KernelNN(nfieldvars,nlocalvars)
+        return None
+    model = build(name,modelconfig,nfieldvars,patchshape,nlocalvars)
     state = torch.load(filepath,map_location='cpu')
     model.load_state_dict(state)
     return model
 
-def inference(model,loader,centers,targettemplate,quadweights,device=DEVICE,ampeneabled=AMPENABLED):
+def inference(model,dataloader,centers,quad,refdadevice):
     '''
     Purpose: Run model, denormalize, and reconstruct full (lat,lon,time) field.
     Args:
     - model (torch.nn.Module): trained model
-    - loader (DataLoader): data loader for evaluation
-    - centers (list[tuple[int,int,int]]): (latidx, lonidx, timeidx) for each sample
-    - targettemplate (torch.Tensor): (nlats, nlons, ntimes) template for reconstruction
-    - quadweights (torch.Tensor): quadrature weights for kernel models
-    - device (str): device to run inference on (defaults to DEVICE)
+    - dataloader (DataLoader): data loader for evaluation
+    - centers (list[tuple[int,int,int]]): list of (latidx, lonidx, timeidx) patch centers
+    - quad (torch.Tensor): quadrature weights for kernel models
+    - device (str): device to use
     Returns:
-    - np.ndarray: reconstructed precipitation field (nlats, nlons, ntimes)
+    - xr.DataArray: predicted precipitation DataArray
     '''
     model = model.to(device)
     quadweights = quadweights.to(device) if quadweights is not None else None
     model.eval()
     outputs = []
     with torch.no_grad():
-        with torch.cuda.amp.autocast(enabled=ampenabled):
-            for batch in loader:
-                patch = batch['patch'].to(device)
-                local = batch.get('local').to(device) if uselocal else None
-                if hasattr(model,'kernellayer'):
-                    output = model(patch,local,quadweights)
-                else:
-                    output = model(patch,local)
-                outputs.append(output.cpu().numpy())
+        for batch in dataloader:
+            patch = batch['patch'].to(device)
+            local = batch['local'].to(device) if uselocal else None
+            output = model(patch,local,quad) if quad is not None else model(patch,local)
+            outputs.append(output.cpu().numpy())
     predictions = np.concatenate(outputs,axis=0)
-    arr = np.full(targettemplate.shape,np.nan,dtype=np.float64)
+    arr = np.full(refda.shape,np.nan,dtype=np.float32)
     for i,(latidx,lonidx,timeidx) in enumerate(centers):
         arr[latidx,lonidx,timeidx] = predictions[i]
-    return arr
+    da = xr.DataArray(arr,dims=refda.dims,coords=refda.coords,name='pr')
+    da.attrs = dict(long_name='NN-predicted precipitation rate',units='N/A')
+    return da
 
-
-def save(arr,refda,name,split,savedir=PREDICTIONDIR):
+def save(da,name,split,savedir=PREDICTIONSDIR):
     '''
-    Purpose: Save predicted precipitation to NetCDF on the target grid.
+    Purpose: Save predicted precipitation xr.DataArray to NetCDF and verify by reopening.
     Args:
-    - arr (np.ndarray): precipitation predictions (nlats, nlons, ntimes)
-    - refda (xr.DataArray): reference DataArray with correct coordinates/dims
+    - da (xr.DataArray): prediction DataArray
     - name (str): model name
     - split (str): 'valid' | 'test'
-    - resultsdir (str): output directory (defaults to PREDICTIONDIR)
+    - resultsdir (str): output directory (defaults to PREDICTIONSDIR)
     Returns:
     - bool: True if save and verification successful, False otherwise
     '''
     os.makedirs(savedir,exist_ok=True)
-    da = xr.DataArray(arr,dims=refda.dims,coords=refda.coords,name='pr')
-    da.attrs = dict(long_name='NN-predicted precipitation rate',units='N/A')
     filename = f'{name}_{split}_pr.nc'
     filepath = os.path.join(savedir,filename)
     logger.info(f'   Attempting to save {filename}...')
     try:
-        da.to_netcdf(filepath, engine='h5netcdf')
-        with xr.open_dataset(filepath, engine='h5netcdf') as _:
+        da.to_netcdf(filepath,engine='h5netcdf')
+        with xr.open_dataset(filepath,engine='h5netcdf') as _:
             pass
         logger.info('      File write successful')
         return True
@@ -112,9 +107,8 @@ def save(arr,refda,name,split,savedir=PREDICTIONDIR):
         logger.exception('      Failed to save or verify')
         return False
 
-
-
-    def save(self,item,name,savedir):
+    
+    def extract(self,item,name,savedir):
         '''
         Purpose: Save kernel weights or kernel-integrated features to a NumPy zip archive then verify by reopening.
         Args:

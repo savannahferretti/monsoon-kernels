@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 
 import os
+import time
 import torch
 import wandb
 import logging
 import argparse
+import numpy as np
 from utils import Config
 from dataset import DataModule
-from network import BaselineNN,KernelNN
+from models import BaselineNN,KernelNN,ModelFactory
 from kernels import NonparametricKernelLayer,ParametricKernelLayer
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
@@ -29,34 +31,6 @@ BATCHSIZE = config.batchsize
 LR        = config.learningrate
 PATIENCE  = config.patience
 CRITERION = config.criterion
-
-def build(name,modelconfig,nfieldvars,nlocalvars):
-    '''
-    Purpose: Build a model instance from configuration.
-    Args:
-    - name (str): model name
-    - modelconfig (dict): model configuration
-    - nfieldvars (int): number of predictor fields
-    - nlocalvars (int): number of local inputs
-    Returns:
-    - torch.nn.Module: initialized model
-    '''
-    modeltype = modelconfig['type']
-    uselocal  = modelconfig['uselocal']
-    if modeltype=='baseline':
-        model = BaselineNN(nfieldvars,patchshape,nlocalvars,uselocal)
-    elif modeltype=='nonparametric':
-        nkernels    = modelconfig['nkernels']
-        kerneldims  = modelconfig['kerneldims']
-        kernellayer = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims)
-        model = KernelNN(kernellayer,nlocalvars,uselocal)
-    elif modeltype=='parametric':
-        nkernels    = modelconfig['nkernels']
-        kerneldict  = modelconfig['kerneldict']
-        kernellayer = ParametricKernelLayer(nfieldvars,nkernels,kernelconfig)
-        model = KernelNN(kernellayer,nlocalvars,uselocal)
-    model.nparams = sum(param.numel() for param in model.parameters())
-    return model
 
 def save(state,name,modeldir=MODELDIR):
     '''
@@ -214,7 +188,8 @@ if __name__=='__main__':
         logger.info('   Initializing model....')
         nfieldvars = len(NFIELDVARS)
         nlocalvars = len(LOCALVARS)
-        model = build(name,modelconfig,nfieldvars,nlocalvars).to(device)
+        patchshape = result['geometry'].shape
+        model = ModelFactory.build(name,modelconfig,nfieldvars,patchshape,nlocalvars).to(device)
         logger.info('   Starting training....')
         trainloader = data['loaders']['train']
         validloader = data['loaders']['valid']

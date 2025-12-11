@@ -131,13 +131,13 @@ class DataModule:
         Purpose: Retrieve data splits as xr.Datasets, convert variable xr.DataArrays into to PyTorch tensors by data type, and extract 
         quadrature weights and coordinates.
         Args:
-        - splits (list[str]): list of splits to load (e.g., ['train', 'valid'])
+        - splits (list[str]): list of splits to load
         - fieldvars (list[str]): predictor field variable names
         - localvars (list[str]): local input variable names
         - targetvar (str): target variable name
         - filedir (str): directory containing split files
         Returns:
-        - dict[str,dict]: < put something here>
+        - dict[str,dict]: dictionary mapping split names to data dictionaries containing tensors and coordinates
         '''
     result = {}
     for split in splits:
@@ -183,9 +183,9 @@ class DataModule:
         - lonrange (tuple[float,float]): longitude range 
         - batchsize (int): batch size for DataLoader
         - workers (int): number of DataLoader workers
-        - device (str): device for training/inferencing
+        - device (str): device to use
         Returns:
-        - dict: <put something here>
+        - dict: dictionary containing patch geometry, centers, datasets, loaders, and quadrature weights
         '''
         geometry     = PatchGeometry(patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'])
         commonkwargs = dict(num_workers=workers,pin_memory=(device=='cuda'),persistent_workers=(workers>0))

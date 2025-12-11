@@ -103,9 +103,9 @@ class KernelNN(torch.nn.Module):
         - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         - returnfeatures (bool): if True, return kernel-integrated features
         Returns:
-        - torch.Tensor: predictions with shape (nbatch,)
+        - torch.Tensor: predictions with shape (nbatch,) or tuple (predictions, features) if 'returnfeatures' is True
         '''
-        kernelfeatures = self.kernellayer(quad)
+        kernelfeatures = self.kernellayer(patch,quad)
         if self.uselocal:
             if local is None:
                 raise ValueError('`local` must be provided when `uselocal` is True')
@@ -115,3 +115,34 @@ class KernelNN(torch.nn.Module):
         if returnfeatures:
             return self.model(X),kernelfeatures
         return self.model(X)
+
+class ModelFactory:
+    
+    def build(name,modelconfig,nfieldvars,patchshape,nlocalvars):
+        '''
+        Purpose: Build a model instance from configuration.
+        Args:
+        - name (str): model name
+        - modelconfig (dict): model configuration
+        - nfieldvars (int): number of predictor fields
+        - patchshape (?): (plats, plons, plevs, ptimes)
+        - nlocalvars (int): number of local inputs
+        Returns:
+        - torch.nn.Module: initialized model
+        '''
+        modeltype = modelconfig['type']
+        uselocal  = modelconfig['uselocal']
+        if modeltype=='baseline':
+            model = BaselineNN(nfieldvars,patchshape,nlocalvars,uselocal)
+        elif modeltype=='nonparametric':
+            nkernels    = modelconfig['nkernels']
+            kerneldims  = modelconfig['kerneldims']
+            kernellayer = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims)
+            model = KernelNN(kernellayer,nlocalvars,uselocal)
+        elif modeltype=='parametric':
+            nkernels    = modelconfig['nkernels']
+            kerneldict  = modelconfig['kerneldict']
+            kernellayer = ParametricKernelLayer(nfieldvars,nkernels,kernelconfig)
+            model = KernelNN(kernellayer,nlocalvars,uselocal)
+        model.nparams = sum(param.numel() for param in model.parameters())
+        return model
