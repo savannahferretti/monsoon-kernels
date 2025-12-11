@@ -34,7 +34,6 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     '''
     Purpose: Initialize a model instance from ModelFactory.build() and populate with weights from from a saved checkpoint.
     Args:
-    Args:
     - name (str): model name
     - modelconfig (dict): model configuration
     - result (dict[str,object]): dictionary from DataModule.dataloaders()
@@ -82,7 +81,7 @@ def inference(model,result,uselocal,device):
                 output,feature = model(patch,quad,local,returnfeatures=True)
                 featureslist.append(feature.cpu().numpy())
             else:
-                model(patch,local)
+                output = model(patch,local)
             outputslist.append(output.cpu().numpy())
     predictions = np.concatenate(outputslist,axis=0)
     features    = np.concatenate(featureslist,axis=0) if featureslist else None
@@ -109,7 +108,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
         nlats,nlons,ntimes = refda.shape 
         if nonparam and data.ndim==2 and data.shape[1]==nkernels:
             arr = np.full((nkernels,nlats,nlons,ntimes),np.nan,dtype=np.float32)
-            for i,(latidx,lonidx,timidx) in enumerate(centers):
+            for i,(latidx,lonidx,timeidx) in enumerate(centers):
                 arr[:,latidx,lonidx,timidx] = data[i]
             da = xr.DataArray(arr,dims=('member',)+refda.dims,coords={'member':np.arange(nkernels),**refda.coords},name='pr')
         else:
@@ -117,12 +116,12 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
             for i,(latidx,lonidx,timeidx) in enumerate(centers):
                 arr[latidx,lonidx,timeidx] = data[i]
             da = xr.DataArray(arr,dims=refda.dims,coords=refda.coords,name='pr')
-        da.attrs(long_name='Predicted precipitation rate (standardized)',units='N/A')
+        da.attrs = dict(long_name='Predicted precipitation rate (log1p-transformed and standardized)',units='N/A')
         return da.to_dataset()
     elif kind=='features':
         if refda is None or centers is None:
             raise ValueError('`refda` and `centers` required for feature reformatting')
-        if nfeatures!=len(fieldvars)*nkernels:
+        if data.shape[1]!=len(fieldvars)*nkernels:
             raise ValueError('`data.shape[1]` must equal len(fieldvars) × nkernels')
         nsamples,nfeatures = data.shape
         nlats,nlons,ntimes = refda.shape
@@ -131,7 +130,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
         if nonparam:
             arr = np.full((nkernels,len(fieldvars),nlats,nlons,ntimes),np.nan,dtype=np.float32)
             for i,(latidx,lonidx,timidx) in enumerate(centers):
-                arr[:,latidx,lonidx,timidx] = data[i].transpose(1,0)
+                arr[:,:,latidx,lonidx,timidx] = data[i].transpose(1,0)
             for fieldidx,varname in enumerate(fieldvars):
                 da = xr.DataArray(arr[:,fieldidx,...],dims=('member',)+refda.dims,coords={'member':np.arange(nkernels),**refda.coords},name=varname)
                 da.attrs(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
@@ -245,7 +244,7 @@ if __name__=='__main__':
             cachedconfig = currentconfig
             cachedresult = result
         logger.info('   Initializing model and populating trained weights....')
-        model = load(name,modelconfig,result,device):
+        model = load(name,modelconfig,result,uselocal,device)
         logger.info('   Starting inference....')
         predictions,features = inference(model,result,device)
         logger.info('Saving outputs...')
@@ -254,13 +253,13 @@ if __name__=='__main__':
         haskernel = hasattr(model,'kernellayer')
         nonparam  = haskernel and isinstance(model.kernellayer,NonparametricKernelLayer)
         nkernels  = model.kernellayer.nkernels if haskernel else 1
-        ds = reformat(predictions,kind='predictions',centers=centers,refda=refda,knernels=nkernels,nonparam=nonparam)
+        ds = reformat(predictions,kind='predictions',centers=centers,refda=refda,nkernels=nkernels,nonparam=nonparam)
         save(name,ds,'predictions',split,PREDSDIR)
         if haskernel:
-            weights = model.kernellayer.weights(results['quad'],device,asarray=True)
-            ds = reformat(weights,kind='weights',nkernels=nkernels,kerneldims=odel.kernellayer.kerneldims,nonparam=nonparam)
+            weights = model.kernellayer.weights(result['quad'],device,asarray=True)
+            ds = reformat(weights,kind='weights',nkernels=nkernels,kerneldims=model.kernellayer.kerneldims,nonparam=nonparam)
             save(name,ds,'weights',split,WEIGHTSDIR)
             if features is not None:
                 ds = reformat(features,'features',centers=centers,refda=refda,nkernels=nkernels,nonparam=nonparam)
-                save(name,ds,'features',split,FEATUREDIR)
+                save(name,ds,'features',split,FEATSDIR)
         del model,predictions,features,centers,refda,haskernel,nonparam,nkernels,ds

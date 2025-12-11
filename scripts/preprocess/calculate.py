@@ -164,8 +164,8 @@ def calc_quadrature_weights(refda,rearth=6.371e6):
     refda = refda.transpose(*dims)
     lats  = refda.lat.values
     lons  = refda.lon.values
-    levs  = refda.lev.values
-    times = np.arange(refda.time.size,dtype=np.float32)
+    levs  = refda.lev.values*100.0
+    times = refda.time.values
     def spacing(coord):
         '''
         Purpose: Estimate spacing between neighboring coordinate points using centered differences in the interior 
@@ -183,10 +183,10 @@ def calc_quadrature_weights(refda,rearth=6.371e6):
     dlat  = spacing(np.deg2rad(lats))
     dlon  = spacing(np.deg2rad(lons))
     dlev  = spacing(levs)
-    dtime = spacing(times)
+    dtime = spacing(((times-times[0])/np.timedelta64(1,'s')))
     area  = ((rearth**2)*np.cos(np.deg2rad(lats))*dlat).reshape(lats.size,1)*dlon.reshape(1,lons.size)
-    quadweights = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size).astype(np.float32)
-    da = xr.DataArray(quadweights,dims=dims,coords=dict(lat=refda.lat,lon=refda.lon,lev=refda.lev,time=refda.time))
+    quad  = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size).astype(np.float32)
+    da = xr.DataArray(quad,dims=dims,coords=dict(lat=refda.lat,lon=refda.lon,lev=refda.lev,time=refda.time))
     return da
 
 def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
@@ -275,7 +275,7 @@ if __name__=='__main__':
     thetae     = calc_thetae(p,t,q)
     thetaestar = calc_thetae(p,t)
     logger.info('Calculating quadrature weights...')
-    quadweights = calc_quadrature_weights(t)
+    quad = calc_quadrature_weights(t)
     logger.info('Creating datasets...')
     dslist = [        
         dataset(t,'t','Air temperature','K'),
@@ -287,7 +287,7 @@ if __name__=='__main__':
         dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
         dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
         dataset(pr,'pr','Precipitation rate','mm/hr'),
-        dataset(quadweights,'quadweights','Quadrature integration weights','m² hPa hr')]
+        dataset(quad,'quad','Quadrature weights','m² Pa s')]
     logger.info('Saving datasets...')
     for ds in dslist:
         save(ds)

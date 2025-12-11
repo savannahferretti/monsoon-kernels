@@ -87,15 +87,16 @@ def normalize(ds,stats):
         mean = stats[f'{varname}_mean']
         std  = stats[f'{varname}_std']
         if varname=='pr':
-            norm = (np.log1p(da.values)-mean)/std
+            norm   = (np.log1p(da.values)-mean)/std
+            suffix = ' (log1p-transformed and standardized)'
         else:
-            norm = (da.values-mean)/std
+            norm   = (da.values-mean)/std
+            suffix = ' (standardized)'
         normda = xr.DataArray(norm.astype(np.float32),dims=da.dims,coords=da.coords,name=da.name)
-        normda.attrs = dict(long_name=da.attrs.get('long_name',da.name),units='N/A')
+        normda.attrs = dict(long_name=da.attrs.get('long_name',da.name)+suffix,units='N/A')
         datavars[varname] = normda
     normds = xr.Dataset(datavars,coords=ds.coords)
     return normds
-
 
 def save(ds,splitname,timechunksize=2208,savedir=SAVEDIR):
     '''

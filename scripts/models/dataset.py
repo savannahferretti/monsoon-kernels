@@ -140,40 +140,40 @@ class DataModule:
         Returns:
         - dict[str,dict]: dictionary mapping split names to data dictionaries containing PyTorch tensors and coordinates
         '''
-    result = {}
-    for split in splits:
-        filename = f'{split}.h5'
-        filepath = os.path.join(filedir,filename)
-        ds = xr.open_dataset(filepath,engine='h5netcdf')
-        fieldlist = []
-        for varname in fieldvars:
-            da  = ds[varname]
-            arr = da.values
-            fieldlist.append(arr)
-        field = torch.from_numpy(np.stack(fieldlist,axis=0))
-        if localvars:
-            locallist = []
-            for varname in localvars:
+        result = {}
+        for split in splits:
+            filename = f'{split}.h5'
+            filepath = os.path.join(filedir,filename)
+            ds = xr.open_dataset(filepath,engine='h5netcdf')
+            fieldlist = []
+            for varname in fieldvars:
                 da  = ds[varname]
-                if 'time' in da.dims:
-                    arr = da.values
-                else:
-                    arr = np.broadcast_to(da.values[...,None],(da.values.shape[0],da.values.shape[1],ds.time.size))
-                locallist.append(arr)
-            local = torch.from_numpy(np.stack(locallist,axis=0))
-        else:
-            local = None
-        target = torch.from_numpy(ds[targetvar].values)
-        quad   = torch.from_numpy(ds['quad'].values)
-        result[split] = { 
-            'ds':ds,
-            'field':field,
-            'local':local,
-            'target':target,
-            'quad':quad,
-            'lats':ds.lat.values,
-            'lons':ds.lon.values}
-        return result  
+                arr = da.values
+                fieldlist.append(arr)
+            field = torch.from_numpy(np.stack(fieldlist,axis=0))
+            if localvars:
+                locallist = []
+                for varname in localvars:
+                    da  = ds[varname]
+                    if 'time' in da.dims:
+                        arr = da.values
+                    else:
+                        arr = np.broadcast_to(da.values[...,None],(da.values.shape[0],da.values.shape[1],ds.time.size))
+                    locallist.append(arr)
+                local = torch.from_numpy(np.stack(locallist,axis=0))
+            else:
+                local = None
+            target = torch.from_numpy(ds[targetvar].values)
+            quad   = torch.from_numpy(ds['quad'].values)
+            result[split] = { 
+                'ds':ds,
+                'field':field,
+                'local':local,
+                'target':target,
+                'quad':quad,
+                'lats':ds.lat.values,
+                'lons':ds.lon.values}
+            return result  
 
     @staticmethod
     def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device):
@@ -195,7 +195,7 @@ class DataModule:
         geometry = PatchGeometry(patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'])
         kwargs   = dict(num_workers=workers,pin_memory=(device=='cuda'),persistent_workers=(workers>0))
         if workers>0:
-            commonkwargs['prefetch_factor'] = 2
+            kwargs['prefetch_factor'] = 2
         centers  = {}
         datasets = {}
         loaders  = {}

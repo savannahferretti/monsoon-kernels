@@ -1,210 +1,178 @@
 #!/usr/bin/env python
 
 import torch
-
+import logging
+import numpy as np
 
 class NonparametricKernelLayer(torch.nn.Module):
-    
-    def __init__(self, nfieldvars, patchshape, nkernels, kerneldims):
+
+    def __init__(self,nfieldvars,nkernels,kerneldims):
         '''
-        Purpose: Initialize free-form (non-parametric) kernels along selected dimensions and compute 
-        quadrature-weighted integrals of predictor patches.
+        Purpose: Initialize free-form (non-parametric) kernels along selected dimensions.
         Args:
-        - nfieldvars (int): number of predictor fields in each patch
-        - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
-        - nkernels (int): number of kernels to learn per predictor field variable
-        - kerneldims (list[str]): subset of ('lat','lon','lev','time') specifying which dims the kernel may vary over
+        - nfieldvars (int): number of predictor fields
+        - nkernels (int): number of kernels to learn per predictor field
+        - kerneldims (list[str] | tuple[str]): dimensions the kernel varies along
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
-        self.patchshape = tuple(int(dimlength) for dimlength in patchshape)
-        self.nkernels = int(nkernels)
+        self.nkernels   = int(nkernels)
         self.kerneldims = tuple(kerneldims)
-        paramsizes = [size if dim in self.kerneldims else 1
-                      for dim, size in zip(('lat', 'lon', 'lev', 'time'), self.patchshape)]
-        self.kernelparams = torch.nn.Parameter(torch.ones(self.nfieldvars, self.nkernels, *paramsizes))
+        self.kernel     = None
 
-    def _normalized_weights(self, quadweights, device, dtype):
+    @torch.no_grad()
+    def weights(self,quad,device,asarray=False):
         '''
-        Purpose: Normalize kernel parameters by their quadrature-weighted integral.
+        Purpose: Obtain normalized non-parametric kernel weights over a patch.
         Args:
-        - quadweights (torch.Tensor): (plats, plons, plevs, ptimes)
-        - device (torch.device): target device
-        - dtype (torch.dtype): target dtype
+        - quad (torch.Tensor): quadrature weights of shape (plats, plons, plevs, ptimes)
+        - device (str): device to use ('cpu' | 'cuda')
+        - asarray (bool): if True, return a NumPy array
         Returns:
-        - torch.Tensor: normalized kernel weights (nfieldvars, nkernels, plats, plons, plevs, ptimes)
+        - torch.Tensor | np.ndarray: normalized kernel weights of shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
         '''
-        quadweights = quadweights.to(device=device, dtype=dtype)
-        kernelparams = self.kernelparams.to(device=device, dtype=dtype)
-        integrated = torch.einsum('fkyxpt,yxpt->fk', kernelparams, quadweights) + 1e-4
-        kernelweights = kernelparams / integrated[:, :, None, None, None, None]
-        return kernelweights
-
-    def weights(self, quadweights):
-        '''
-        Purpose: Return normalized kernel weights for plotting/diagnostics.
-        Args:
-        - quadweights (torch.Tensor): (plats, plons, plevs, ptimes)
-        Returns:
-        - torch.Tensor: (nfieldvars, nkernels, plats, plons, plevs, ptimes)
-        '''
-        device = self.kernelparams.device
-        dtype = self.kernelparams.dtype
-        return self._normalized_weights(quadweights, device, dtype)
-    
-    def forward(self, patch, quadweights):
-        '''
-        Purpose: Apply learned free-form kernels to a batch of patches and compute kernel-integrated features.
-        Args:
-        - patch (torch.Tensor): (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - quadweights (torch.Tensor): (plats, plons, plevs, ptimes)
-        Returns:
-        - torch.Tensor: (nbatch, nfieldvars*nkernels)
-        '''
-        (nbatch, nfieldvars, _, _, _, _), device, dtype = patch.shape, patch.device, patch.dtype
-        if nfieldvars != self.nfieldvars:
-            raise ValueError(f'Expected {self.nfieldvars} field variables, got {nfieldvars}')
-        kernelweights = self._normalized_weights(quadweights, device, dtype)
-        features = torch.einsum('bfyxpt,fkyxpt,yxpt->bfk', patch, kernelweights, quadweights.to(device=device, dtype=dtype))
-        return features.reshape(nbatch, self.nfieldvars * self.nkernels)
+        if self.kernel is None:
+            plats,plons,plevs,ptimes = quad.shape
+            kernelshape = [size if dim in self.kerneldims else 1 for dim,size in zip(('lat','lon','lev','time'),(plats,plons,plevs,ptimes))]
+            self.kernel = torch.nn.Parameter(torch.ones(self.nfieldvars,self.nkernels,*kernelshape,device=device,dtype=quad.dtype))
+        kernel = self.kernel
+        quad   = quad.to(device)
+        integral = torch.einsum('fkyxpt,yxpt->fk',kernel,quad)+1e-4
+        weights  = kernel/integral[:,:,None,None,None,None]
+        if asarray:
+            return weights.detach().cpu().numpy()
+        return weights
         
+    def forward(self,patch,quad):
+        '''
+        Purpose: Apply learned non-parametric kernels to a batch of patches and compute kernel-integrated features.
+        Args:
+        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - quad (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
+        Returns:
+        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
+        '''
+        weights  = self.weights(quad,patch.device,asarray=False)
+        features = torch.einsum('bfyxpt,fkyxpt,yxpt->bfk',patch,weights,quad)
+        return features.reshape(patch.shape[0],self.nfieldvars*self.nkernels)
 
 class ParametricKernelLayer(torch.nn.Module):
+         
+    class GaussianKernel(torch.nn.Module):
 
-    def __init__(self, nfieldvars, patchshape, nkernels, kerneldims, families):
+        def __init__(self,nfieldvars,nkernels):
+            '''
+            Purpose: Initialize Gaussian kernel parameters along one dimension.
+            Args:
+            - nfieldvars (int): number of predictor fields
+            - nkernels (int): number of kernels to learn per predictor field
+            '''
+            super().__init__()
+            self.nfieldvars = int(nfieldvars)
+            self.nkernels   = int(nkernels)
+            self.mean       = torch.nn.Parameter(torch.zeros(self.nfieldvars,self.nkernels))
+            self.logstd     = torch.nn.Parameter(torch.zeros(self.nfieldvars,self.nkernels))
+
+        def forward(self,length,device):
+            '''
+            Purpose: Evaluate Gaussian kernel along a symmetric coordinate in [-1,1].
+            Args:
+            - length (int): number of points along the axis
+            - device (str): device to use ('cpu' | 'cuda')
+            Returns:
+            - torch.Tensor: Gaussian kernel values with shape (nfieldvars, nkernels, length)
+            '''
+            coord = torch.linspace(-1.0,1.0,steps=length,device=device)
+            std   = torch.exp(self.logstd)
+            return torch.exp(-0.5*((coord[None,None,:]-self.mean[...,None])/std[...,None])**2)
+
+    class ExponentialKernel(torch.nn.Module):
+
+        def __init__(self,nfieldvars,nkernels):
+            '''
+            Purpose: Initialize exponential-decay kernel parameters along one dimension.
+            Args:
+            - nfieldvars (int): number of predictor fields
+            - nkernels (int): number of kernels to learn per predictor field
+            '''
+            super().__init__()
+            self.nfieldvars = int(nfieldvars)
+            self.nkernels   = int(nkernels)
+            self.logtau     = torch.nn.Parameter(torch.zeros(self.nfieldvars,self.nkernels))
+
+        def forward(self,length,device):
+            '''
+            Purpose: Evaluate causal exponential kernel along non-negative coordinate [0,1,2,...].
+            Args:
+            - length (int): number of points along the axis
+            - device (str): device to use ('cpu' | 'cuda')
+            Returns:
+            - torch.Tensor: exponential kernel values with shape (nfieldvars, nkernels, length)
+            '''
+            coord = torch.arange(length,device=device)
+            tau   = torch.exp(self.logtau)+1e-4
+            return torch.exp(-coord[None,None,:]/tau[...,None])
+
+    def __init__(self,nfieldvars,nkernels,kerneldict):
         '''
-        Purpose: Initialize smooth parametric kernels along selected dimensions and compute 
-        quadrature-weighted integrals of predictor patches.
+        Purpose: Initialize smooth parametric kernels along selected dimensions.
         Args:
-        - nfieldvars (int): number of predictor fields in each patch
-        - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
-        - nkernels (int): number of kernels to learn per predictor field variable
-        - kerneldims (list[str]): subset of ('lat','lon','lev','time') specifying which dims the kernel may vary over
-        - families (dict[str,str]): mapping of dimension name to kernel type ('gaussian' | 'exponential')
+        - nfieldvars (int): number of predictor fields
+        - nkernels (int): number of kernels to learn per predictor field
+        - kerneldict (dict[str,str]): mapping of dimensions the kernel varies along to a function ('gaussian' | 'exponential')
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
-        self.patchshape = tuple(int(dimlength) for dimlength in patchshape)
-        self.nkernels = int(nkernels)
-        self.kerneldims = tuple(kerneldims)
-        self.families = {}
-        families = families or {}
-        for dim in self.kerneldims:
-            family = families.get(dim, 'gaussian')
-            if family not in ('gaussian', 'exponential'):
-                raise ValueError(f'Unknown family `{family}` for `{dim}` dimension')
-            self.families[dim] = family
-        self.logtau = torch.nn.ParameterDict()
-        self.mu = torch.nn.ParameterDict()
-        self.logsigma = torch.nn.ParameterDict()
-        for dim in self.kerneldims:
-            family = self.families[dim]
-            if family == 'gaussian':
-                self.mu[dim] = torch.nn.Parameter(torch.zeros(self.nfieldvars, self.nkernels))
-                self.logsigma[dim] = torch.nn.Parameter(torch.zeros(self.nfieldvars, self.nkernels))
-            elif family == 'exponential':
-                self.logtau[dim] = torch.nn.Parameter(torch.zeros(self.nfieldvars, self.nkernels))
+        self.nkernels   = int(nkernels)
+        self.kerneldims = tuple(kerneldict.keys())
+        self.kerneldict = dict(kerneldict)
+        self.functions  = torch.nn.ModuleDict()
+        for dim,function in self.kerneldict.items():
+            if function=='gaussian':
+                self.functions[dim] = self.GaussianKernel(self.nfieldvars,self.nkernels)
+            elif function=='exponential':
+                self.functions[dim] = self.ExponentialKernel(self.nfieldvars,self.nkernels)
+            else:
+                raise ValueError(f'Unknown function type `{function}`; must be either `gaussian` or `exponential`')
 
-    @staticmethod
-    def gaussian(coord, mu, logsigma):
-        ''' 
-        Purpose: Evaluate a Gaussian kernel along one axis for each (field, kernel) pair.
+    @torch.no_grad()
+    def weights(self,quad,device,asarray=False):
+        '''
+        Purpose: Obtain normalized parametric kernel weights over a patch.
         Args:
-        - coord (torch.Tensor): 1D coordinate tensor
-        - mu (torch.Tensor): (nfieldvars, nkernels) mean parameters
-        - logsigma (torch.Tensor): (nfieldvars, nkernels) log standard deviation parameters
+        - quad (torch.Tensor): quadrature weights of shape (plats, plons, plevs, ptimes)
+        - device (str): device to use ('cpu' | 'cuda')
+        - asarray (bool): if True, return a NumPy array
         Returns:
-        - torch.Tensor: (nfieldvars, nkernels, len(coord)) Gaussian kernel values
+        - torch.Tensor | np.ndarray: normalized kernel weights of shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
         '''
-        sigma = torch.exp(logsigma)
-        return torch.exp(-0.5 * ((coord[None, None, :] - mu[..., None]) / sigma[..., None]) ** 2)
-    
-    @staticmethod
-    def exponential(coord, logtau):
-        ''' 
-        Purpose: Evaluate an exponential-decay kernel along one axis for each (field, kernel) pair.
-        Args:
-        - coord (torch.Tensor): 1D coordinate tensor
-        - logtau (torch.Tensor): (nfieldvars, nkernels) log decay scale parameters
-        Returns:
-        - torch.Tensor: (nfieldvars, nkernels, len(coord)) exponential kernel values
-        '''
-        tau = torch.exp(logtau) + 1e-6
-        return torch.exp(-coord[None, None, :] / tau[..., None])
-
-    def _build_kernel_params(self, device, dtype):
-        '''
-        Purpose: Construct parametric kernel values over the patch grid.
-        Args:
-        - device (torch.device): target device
-        - dtype (torch.dtype): target dtype
-        Returns:
-        - torch.Tensor: (nfieldvars, nkernels, plats, plons, plevs, ptimes)
-        '''
-        plats, plons, plevs, ptimes = self.patchshape
-        sizebydim = {'lat': plats, 'lon': plons, 'lev': plevs, 'time': ptimes}
-        axisbydim = {'lat': 2, 'lon': 3, 'lev': 4, 'time': 5}
-        kernelparams = torch.ones(
-            self.nfieldvars, self.nkernels, plats, plons, plevs, ptimes,
-            device=device, dtype=dtype)
-        for dim in self.kerneldims:
-            length = sizebydim[dim]
-            axis = axisbydim[dim]
-            family = self.families[dim]
-            if family == 'gaussian':
-                coord = torch.linspace(-1.0, 1.0, steps=length, device=device, dtype=dtype)
-                mu = self.mu[dim].to(device=device, dtype=dtype)
-                logsigma = self.logsigma[dim].to(device=device, dtype=dtype)
-                kernel1d = self.gaussian(coord, mu, logsigma)
-            elif family == 'exponential':
-                coord = torch.arange(length, device=device, dtype=dtype)
-                logtau = self.logtau[dim].to(device=device, dtype=dtype)
-                kernel1d = self.exponential(coord, logtau)
-            shape = [self.nfieldvars, self.nkernels, 1, 1, 1, 1]
-            shape[axis] = length
-            kernelparams = kernelparams * kernel1d.view(*shape)
-        return kernelparams
-
-    def _normalized_weights(self, quadweights, device, dtype):
-        '''
-        Purpose: Normalize parametric kernels by their quadrature-weighted integral.
-        Args:
-        - quadweights (torch.Tensor): (plats, plons, plevs, ptimes)
-        - device (torch.device): target device
-        - dtype (torch.dtype): target dtype
-        Returns:
-        - torch.Tensor: (nfieldvars, nkernels, plats, plons, plevs, ptimes)
-        '''
-        quadweights = quadweights.to(device=device, dtype=dtype)
-        kernelparams = self._build_kernel_params(device, dtype)
-        integrated = torch.einsum('fkyxpt,yxpt->fk', kernelparams, quadweights) + 1e-4
-        kernelweights = kernelparams / integrated[:, :, None, None, None, None]
-        return kernelweights
-
-    def weights(self, quadweights):
-        '''
-        Purpose: Return normalized parametric kernel weights for plotting/diagnostics.
-        Args:
-        - quadweights (torch.Tensor): (plats, plons, plevs, ptimes)
-        Returns:
-        - torch.Tensor: (nfieldvars, nkernels, plats, plons, plevs, ptimes)
-        '''
-        device = next(self.parameters()).device
-        dtype = next(self.parameters()).dtype
-        return self._normalized_weights(quadweights, device, dtype)
-
-    def forward(self, patch, quadweights):
+        (plats,plons,plevs,ptimes) = quad.shape
+        quad   = quad.to(device)
+        kernel = torch.ones(self.nfieldvars,self.nkernels,plats,plons,plevs,ptimes,device=device,dtype=quad.dtype)
+        for ax,dim in enumerate(('lat','lon','lev','time'),start=2):
+            if dim not in self.kerneldims:
+                continue
+            dimlength = kernel.shape[ax]
+            function  = self.functions[dim]
+            kernel1D  = function(dimlength,device)
+            kernelshape     = [self.nfieldvars,self.nkernels,1,1,1,1]
+            kernelshape[ax] = dimlength
+            kernel          = kernel*kernel1D.view(*kernelshape)
+        integral = torch.einsum('fkyxpt,yxpt->fk',kernel,quad)+1e-4
+        weights  = kernel/integral[:,:,None,None,None,None]
+        if asarray:
+            return weights.detach().cpu().numpy()
+        return weights
+        
+    def forward(self,patch,quad):
         '''
         Purpose: Apply learned parametric kernels to a batch of patches and compute kernel-integrated features.
         Args:
-        - patch (torch.Tensor): (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - quadweights (torch.Tensor): (plats, plons, plevs, ptimes)
+        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - quad (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
         Returns:
-        - torch.Tensor: (nbatch, nfieldvars*nkernels)
+        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
         '''
-        (nbatch, nfieldvars, _, _, _, _), device, dtype = patch.shape, patch.device, patch.dtype
-        if nfieldvars != self.nfieldvars:
-            raise ValueError(f'Expected {self.nfieldvars} field variables, got {nfieldvars}')
-        kernelweights = self._normalized_weights(quadweights, device, dtype)
-        features = torch.einsum('bfyxpt,fkyxpt,yxpt->bfk', patch, kernelweights, quadweights.to(device=device, dtype=dtype))
-        return features.reshape(nbatch, self.nfieldvars * self.nkernels)
+        weights  = self.weights(quad,patch.device,asarray=False)
+        features = torch.einsum('bfyxpt,fkyxpt,yxpt->bfk',patch,weights,quad)
+        return features.reshape(patch.shape[0],self.nfieldvars*self.nkernels)
