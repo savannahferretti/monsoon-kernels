@@ -173,7 +173,7 @@ class DataModule:
                 'quad':quad,
                 'lats':ds.lat.values,
                 'lons':ds.lon.values}
-        return result  
+        return result        
 
     @staticmethod
     def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device):
@@ -187,7 +187,7 @@ class DataModule:
         - lonrange (tuple[float,float]): longitude range 
         - batchsize (int): batch size for PyTorch DataLoader
         - workers (int): number of PyTorch DataLoader workers
-        - device (str): device to use ('cpu' | 'cuda')
+        - device (str): 'cpu' | 'cuda'
         Returns:
         - dict[str,object]: dictionary containing the patch geometry, valid centers, constructed datasets, 
          dataloaders, and the quadrature-weight PyTorch tensor

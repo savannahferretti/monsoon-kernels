@@ -40,8 +40,8 @@ def initialize(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCA
     - modelconfig (dict): model configuration
     - result (dict[str,object]): dictionary from DataModule.dataloaders()
     - device (str): device to use ('cpu' | 'cuda')
-    - fieldvars (int): predictor field variable names (defaults to FIELDVARS)
-    - localvars (int): local input variable names (defaults to LOCALVARS)
+    - fieldvars (list[str]): predictor field variable names (defaults to FIELDVARS)
+    - localvars (list[str]): local input variable names (defaults to LOCALVARS)
     - modeldir (str): directory containing checkpoints (defaults to MODELDIR)
     Returns:
     - torch.nn.Module: initialized model instance on 'device'

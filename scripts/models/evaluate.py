@@ -37,7 +37,7 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     - name (str): model name
     - modelconfig (dict): model configuration
     - result (dict[str,object]): dictionary from DataModule.dataloaders()
-    - device (str): device to use ('cpu' | 'cuda')
+    - device (str): 'cpu' | 'cuda'
     - fieldvars (list[str]): predictor field variable names (defaults to FIELDVARS)
     - localvars (list[str]): local input variable names (defaults to LOCALVARS)
     - modeldir (str): directory containing checkpoints (defaults to MODELDIR)
@@ -58,18 +58,19 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     model.load_state_dict(state)
     return model.to(device)
 
-def inference(model,result,uselocal,device):
+def inference(model,split,result,uselocal,device):
     '''
     Purpose: Run inference on the model.
     Args:
     - model (torch.nn.Module): trained model instance 
+    - split (str): 'valid' | 'test'
     - result (dict[str,object]): dictionary from DataModule.dataloaders()
     - uselocal (bool): whether to use local inputs
-    - device (str): device to use
+    - device (str): 'cpu' | 'cuda'
     Returns:
     - xr.DataArray: predicted precipitation DataArray
     '''
-    dataloader = result['loader']
+    dataloader = result['loader'][split]
     model.eval()
     outputslist  = []
     featureslist = []
@@ -79,7 +80,7 @@ def inference(model,result,uselocal,device):
             local = batch['local'].to(device) if uselocal else None
             if hasattr(model,'kernellayer'):
                 quad = result['quad'].to(device)
-                output,feature = model(patch,quad,local,getfeatures=True)
+                output,feature = model(patch,quad,local)
                 featureslist.append(feature.cpu().numpy())
             else:
                 output = model(patch,local)
@@ -98,7 +99,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
     - refda (xr.DataArray | None): reference DataArray for reconstructing predictions and features or None
     - nkernels (int | None): number of learned kernels or None
     - kerneldims (list[str] | tuple[str] | None): dimensions along which the kernel varies for reconstructing weights or None
-    - nonparam (bool): True for non-parametric kernels, False for parametric kernels
+    - nonparam (bool): whether the kernel is non-parametric
     - fieldvars (list[str]): predictor variable names(defaults to FIELDVARS)
     Returns:
     - xr.Dataset: Datset of predictions, features, or weights
@@ -230,7 +231,7 @@ if __name__=='__main__':
     cachedresult = None
     for name,modelconfig in config.models.items():
         name = modelconfig['name']
-        if models is not None and name not in models
+        if models is not None and name not in models:
             continue
         logger.info(f'Running {name}...')
         patchconfig   = modelconfig['patch']
@@ -247,7 +248,7 @@ if __name__=='__main__':
         logger.info('   Initializing model and populating trained weights....')
         model = load(name,modelconfig,result,device)
         logger.info('   Starting inference....')
-        predictions,features = inference(model,result,uselocal,device)
+        predictions,features = inference(model,split,result,uselocal,device)
         logger.info('Saving outputs...')
         centers   = result['centers'][split]
         refda     = splitdata[split]['ds'][TARGETVAR]

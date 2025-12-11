@@ -96,16 +96,15 @@ class KernelNN(torch.nn.Module):
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
 
-    def forward(self,patch,quad,local=None,getfeatures=False):
+    def forward(self,patch,quad,local=None):
         '''
         Purpose: Forward pass through KernelNN.
         Args:
         - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - quad (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
         - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
-        - getfeatures (bool): if True, return kernel-integrated features
         Returns:
-        - torch.Tensor | tuple[torch.Tensor,torch.Tensor]: predictions with shape (nbatch,) or tuple (predictions, features) if 'getfeatures' is True
+        - tuple[torch.Tensor,torch.Tensor]: predictions with shape (nbatch,) and kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
         '''
         features = self.kernellayer(patch,quad)
         if self.uselocal:
@@ -114,9 +113,7 @@ class KernelNN(torch.nn.Module):
             X = torch.cat([features,local],dim=1)
         else:
             X = features
-        if getfeatures:
-            return self.model(X),features
-        return self.model(X)
+        return self.model(X),features
 
 class ModelFactory:
 
@@ -133,16 +130,16 @@ class ModelFactory:
         Returns:
         - torch.nn.Module: initialized model
         '''
-        modeltype = modelconfig['type']
-        uselocal  = modelconfig['uselocal']
-        if modeltype=='baseline':
+        kind      = modelconfig['kind]
+        uselocal = modelconfig['uselocal']
+        if kind=='baseline':
             model = BaselineNN(patchshape,nfieldvars,nlocalvars,uselocal)
-        elif modeltype=='nonparametric':
+        elif kind=='nonparametric':
             nkernels    = modelconfig['nkernels']
             kerneldims  = modelconfig['kerneldims']
             kernellayer = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims)
             model = KernelNN(kernellayer,nlocalvars,uselocal)
-        elif modeltype=='parametric':
+        elif kind=='parametric':
             nkernels    = modelconfig['nkernels']
             kerneldict  = modelconfig['kerneldict']
             kernellayer = ParametricKernelLayer(nfieldvars,nkernels,kerneldict)
