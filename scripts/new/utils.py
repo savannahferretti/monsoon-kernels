@@ -25,12 +25,16 @@ class Config:
         return self.paths['modeldir']
 
     @property
-    def featuredir(self):
-        return self.paths['featuredir']
+    def predsdir(self):
+        return self.paths['predsdir']
 
     @property
-    def predictionsdir(self):
-        return self.paths['predictionsdir']
+    def featsdir(self):
+        return self.paths['featsdir']
+
+    @property
+    def weightsdir(self):
+        return self.paths['weightsdir']
 
     @property
     def fieldvars(self):

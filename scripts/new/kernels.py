@@ -26,7 +26,7 @@ class NonparametricKernelLayer(torch.nn.Module):
         Purpose: Obtain normalized non-parametric kernel weights over a patch.
         Args:
         - quad (torch.Tensor): quadrature weights of shape (plats, plons, plevs, ptimes)
-        - device (str): device to use
+        - device (str): device to use ('cpu' | 'cuda')
         - asarray (bool): if True, return a NumPy array
         Returns:
         - torch.Tensor | np.ndarray: normalized kernel weights of shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
@@ -78,7 +78,7 @@ class ParametricKernelLayer(torch.nn.Module):
             Purpose: Evaluate Gaussian kernel along a symmetric coordinate in [-1,1].
             Args:
             - length (int): number of points along the axis
-            - device (str): device to use
+            - device (str): device to use ('cpu' | 'cuda')
             Returns:
             - torch.Tensor: Gaussian kernel values with shape (nfieldvars, nkernels, length)
             '''
@@ -105,7 +105,7 @@ class ParametricKernelLayer(torch.nn.Module):
             Purpose: Evaluate causal exponential kernel along non-negative coordinate [0,1,2,...].
             Args:
             - length (int): number of points along the axis
-            - device (str): device to use
+            - device (str): device to use ('cpu' | 'cuda')
             Returns:
             - torch.Tensor: exponential kernel values with shape (nfieldvars, nkernels, length)
             '''
@@ -133,7 +133,7 @@ class ParametricKernelLayer(torch.nn.Module):
             elif function=='exponential':
                 self.functions[dim] = self.ExponentialKernel(self.nfieldvars,self.nkernels)
             else:
-                raise ValueError(f'Unknown function type `{function}`, must be either `gaussian` or `exponential`')
+                raise ValueError(f'Unknown function type `{function}`; must be either `gaussian` or `exponential`')
 
     @torch.no_grad()
     def weights(self,quad,device,asarray=False):
@@ -141,7 +141,7 @@ class ParametricKernelLayer(torch.nn.Module):
         Purpose: Obtain normalized parametric kernel weights over a patch.
         Args:
         - quad (torch.Tensor): quadrature weights of shape (plats, plons, plevs, ptimes)
-        - device (str): device to use
+        - device (str): device to use ('cpu' | 'cuda')
         - asarray (bool): if True, return a NumPy array
         Returns:
         - torch.Tensor | np.ndarray: normalized kernel weights of shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)

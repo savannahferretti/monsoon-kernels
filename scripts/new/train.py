@@ -32,6 +32,26 @@ LR        = config.learningrate
 PATIENCE  = config.patience
 CRITERION = config.criterion
 
+def initialize(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,modeldir=MODELDIR):
+    '''
+    Purpose: Initialize a model instance from ModelFactory.build().
+    Args:
+    - name (str): model name
+    - modelconfig (dict): model configuration
+    - result (dict[str,object]): dictionary from DataModule.dataloaders()
+    - device (str): device to use ('cpu' | 'cuda')
+    - fieldvars (int): predictor field variable names (defaults to FIELDVARS)
+    - localvars (int): local input variable names (defaults to LOCALVARS)
+    - modeldir (str): directory containing checkpoints (defaults to MODELDIR)
+    Returns:
+    - torch.nn.Module: initialized model instance on 'device'
+    '''
+    patchshape = result['geometry'].shape
+    nfieldvars = len(fieldvars)
+    nlocalvars = len(localvars)
+    model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
+    return model.to(device)
+    
 def save(state,name,modeldir=MODELDIR):
     '''
     Purpose: Save best (lowest validation loss) model checkpoint, then verify by reopening.
@@ -55,17 +75,15 @@ def save(state,name,modeldir=MODELDIR):
         logger.exception('         Failed to save or verify')
         return False
 
-def fit(name,model,trainloader,validloader,device,uselocal,quad,project=PROJECT,lr=LR,patience=PATIENCE,criterion=CRITERION,epochs=EPOCHS,modeldir=MODELDIR):
+def fit(name,model,result,uselocal,device,project=PROJECT,lr=LR,patience=PATIENCE,criterion=CRITERION,epochs=EPOCHS,modeldir=MODELDIR):
     '''
     Purpose: Train a model with early stopping and learning rate scheduling, then save the best checkpoint.
     Args:
     - name (str): model name
     - model (torch.nn.Module): initialized model instance
-    - trainloader (DataLoader): training data loader
-    - validloader (DataLoader): validation data loader
-    - device (str): device to use
+    - result (dict[str,object]): dictionary from DataModule.dataloaders()
     - uselocal (bool): whether to use local inputs
-    - quad (torch.Tensor | None): quadrature weights for kernel models or None
+    - device (str): device to use
     - project (str): project name for Weights & Biases logging
     - lr (float): learning rate (defaults to LR)
     - patience (int): early stopping patience (defaults to PATIENCE)
@@ -73,8 +91,8 @@ def fit(name,model,trainloader,validloader,device,uselocal,quad,project=PROJECT,
     - epochs (int): maximum number of epochs (defaults to EPOCHS)
     - modeldir (str): directory to save model checkpoints (defaults to MODELDIR)
     '''
-    model = model.to(device)
-    quad  = quad.to(device) if quad is not None else None
+    trainloader = result['loaders']['train']
+    validloader = result['loaders']['valid']
     optimizer = torch.optim.Adam(model.parameters(),lr=lr)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,max_lr=lr,epochs=epochs,steps_per_epoch=len(trainloader),pct_start=0.2,anneal_strategy='cos',div_factor=10,final_div_factor=100)
@@ -101,7 +119,11 @@ def fit(name,model,trainloader,validloader,device,uselocal,quad,project=PROJECT,
             target = batch['target'].to(device)
             local  = batch['local'].to(device) if uselocal else None
             optimizer.zero_grad()
-            output = model(patch,local,quad) if quad is not None else model(patch,local)
+            if hasattr(model,'kernellayer'):
+                quad = result['quad'].to(device)
+                output = model(patch,quad,local)
+            else:
+                model(patch,local)
             loss   = criterion(output,target)
             loss.backward()
             optimizer.step()
@@ -114,7 +136,11 @@ def fit(name,model,trainloader,validloader,device,uselocal,quad,project=PROJECT,
                 patch  = batch['patch'].to(device)
                 target = batch['target'].to(device)
                 local  = batch['local'].to(device) if uselocal else None
-                output = model(patch,local,quad) if quad is not None else model(patch,local)
+                if hasattr(model,'kernellayer'):
+                    quad = result['quad'].to(device)
+                    output = model(patch,quad,local)
+                else:
+                    model(patch,local)
                 loss   = criterion(output,target)
                 totalloss += loss.item()*len(target)
         validloss = totalloss/len(validloader.dataset)
@@ -174,25 +200,19 @@ if __name__=='__main__':
         if name not in models:
             continue
         logger.info(f'Running `{name}`...')
-        patchconfig = modelconfig['patch']
-        uselocal    = modelconfig['uselocal']
-        logger.info('   Building data loaders....')
+        patchconfig   = modelconfig['patch']
+        uselocal      = modelconfig['uselocal']
         currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
         if currentconfig==cachedconfig:
             logger.info('   Reusing cached datasets and loaders...')
             result = cachedresult
         else:
+            logger.info('   Building new datasets and loaders....')
             result = DataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)
             cachedconfig = currentconfig
             cachedresult = result
         logger.info('   Initializing model....')
-        nfieldvars = len(NFIELDVARS)
-        nlocalvars = len(LOCALVARS)
-        patchshape = result['geometry'].shape
-        model = ModelFactory.build(name,modelconfig,nfieldvars,patchshape,nlocalvars).to(device)
+        model = initialize(name,modelconfig,result,device)
         logger.info('   Starting training....')
-        trainloader = data['loaders']['train']
-        validloader = data['loaders']['valid']
-        quad        = data['quad']
-        fit(name,model,trainloader,validloader,device,uselocal,quad)
+        fit(name,model,uselocal,device)
         del model

@@ -2,8 +2,9 @@
   "paths":{
     "splitdir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits",
     "modeldir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/models",
-    "featuredir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/features",
-    "predictionsdir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/predictions"},
+    "predsdir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/predictions",
+    "featsdir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/features",
+    "weightsdir":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/weights"},
   "variables":{
     "fieldvars":["rh","thetae","thetaestar"],
     "localvars":["lf","lhf", "shf"],

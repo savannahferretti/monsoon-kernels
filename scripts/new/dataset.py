@@ -21,7 +21,8 @@ class PatchGeometry:
     
     def shape(self):
         '''
-        Purpose: Infer (plats, plons, plevs, ptimes) from patch geometry and grid size.
+        Purpose: Infer the number of patch latitudes, longitudes, vertical levels, and time steps from patch 
+        geometry and grid size.
         Returns:
         - tuple[int,int,int,int]: (plats, plons, plevs, ptimes)
         '''
@@ -33,8 +34,8 @@ class PatchGeometry:
     
     def centers(self,target,lats,lons,latrange,lonrange):
         '''
-        Purpose: Build (latidx, lonidx, timeidx) centers where the patch fits, target is finite, and (lat, lon) lies 
-        inside the prediction domain.
+        Purpose: Build (latidx, lonidx, timeidx) centers where the patch fits, target is finite, and the 
+        center lies inside the prediction domain.
         Args:
         - target (torch.Tensor): target values with shape (nlats, nlons, ntimes)
         - lats (np.ndarray): latitude values with shape (nlats,)
@@ -57,16 +58,16 @@ class PatchGeometry:
 
 class PatchDataset(torch.utils.data.Dataset):
     
-    def __init__(self,field,local,target,centers,geometry,uselocal):
+    def __init__(self,geometry,centers,field,local,uselocal,target):
         '''
-        Purpose: Return predictor field patches, optional local inputs, and target values for (lat, lon, time) samples.
+        Purpose: Return predictor field patches, optional local inputs, and target values for each patch center.
         Args:
-        - field (torch.Tensor): predictor fields with shape (nfieldvars, nlats, nlons, nlevs, ntimes)
-        - local (torch.Tensor | None): local inputs with shape (nlocalvars, nlats, nlons, ntimes)
-        - target (torch.Tensor): target values with shape (nlats, nlons, ntimes)
-        - centers (list[tuple[int,int,int]]): (latidx, lonidx, timeidx) patch centers
         - geometry (PatchGeometry): patch geometry
+        - centers (list[tuple[int,int,int]]): list of (latidx, lonidx, timeidx) patch centers
+        - field (torch.Tensor): predictor fields with shape (nfieldvars, nlats, nlons, nlevs, ntimes)
+        - local (torch.Tensor | None): local inputs with shape (nlocalvars, nlats, nlons, ntimes) if uselocal is True, otherwise None
         - uselocal (bool): whether to use local inputs
+        - target (torch.Tensor): target values with shape (nlats, nlons, ntimes)
         '''
         super().__init__()
         if field.ndim != 5:
@@ -94,9 +95,9 @@ class PatchDataset(torch.utils.data.Dataset):
         '''
         Purpose: Extract a single sample containing a predictor fields patch, optional local inputs, and a target value.
         Args:
-        - centeridx (int): index into valid centers list
+        - idx (int): index into valid centers list
         Returns:
-        - dict: sample with keys 'patch', 'target', and optionally 'local'
+        - dict[str,torch.Tensor]: dictionary containing the patch, target, and optionally local PyTorch tensors for a given sample
         '''
         latidx,lonidx,timeidx      = self.centers[idx]
         _,nlats,nlons,nlevs,ntimes = self.field.shape
@@ -114,8 +115,8 @@ class PatchDataset(torch.utils.data.Dataset):
         if patchtimelength<neededlength:
             padlength = neededlength-patchtimelength
             padshape  = (patch.shape[0],patch.shape[1],patch.shape[2],patch.shape[3],padlength)
-            pad   = torch.zeros(padshape,dtype=self.field.dtype)
-            patch = torch.cat([pad,patch],dim=-1)
+            timepad   = torch.zeros(padshape,dtype=self.field.dtype)
+            patch = torch.cat([timepad,patch],dim=-1)
         sample = {
             'patch':patch,
             'target':self.target[latidx,lonidx,timeidx]}
@@ -128,8 +129,8 @@ class DataModule:
     @staticmethod
     def prepare(splits,fieldvars,localvars,targetvar,filedir):
         '''
-        Purpose: Retrieve data splits as xr.Datasets, convert variable xr.DataArrays into to PyTorch tensors by data type, and extract 
-        quadrature weights and coordinates.
+        Purpose: Retrieve data splits as xr.Datasets, convert variable xr.DataArrays into to PyTorch tensors by data type, 
+        and extract quadrature weights and coordinates.
         Args:
         - splits (list[str]): list of splits to load
         - fieldvars (list[str]): predictor field variable names
@@ -137,7 +138,7 @@ class DataModule:
         - targetvar (str): target variable name
         - filedir (str): directory containing split files
         Returns:
-        - dict[str,dict]: dictionary mapping split names to data dictionaries containing tensors and coordinates
+        - dict[str,dict]: dictionary mapping split names to data dictionaries containing PyTorch tensors and coordinates
         '''
     result = {}
     for split in splits:
@@ -154,7 +155,10 @@ class DataModule:
             locallist = []
             for varname in localvars:
                 da  = ds[varname]
-                arr = da.values if 'time' in da.dims else np.broadcast_to(da.values[...,None],(da.values.shape[0],da.values.shape[1],ds.time.size))
+                if 'time' in da.dims:
+                    arr = da.values
+                else:
+                    arr = np.broadcast_to(da.values[...,None],(da.values.shape[0],da.values.shape[1],ds.time.size))
                 locallist.append(arr)
             local = torch.from_numpy(np.stack(locallist,axis=0))
         else:
@@ -176,34 +180,32 @@ class DataModule:
         '''
         Purpose: Build PatchGeometry, centers, PatchDatasets, and DataLoaders for given splits.
         Args:
-        - splitdata (dict): dictionary from prepare_splits() containing tensors and coordinates
-        - patchconfig (dict): patch configuration with keys 'radius', 'maxlevs', and 'timelag'
+        - splitdata (dict): dictionary from prepare()
+        - patchconfig (dict): patch configuration
         - uselocal (bool): whether to use local inputs
         - latrange (tuple[float,float]): latitude range 
         - lonrange (tuple[float,float]): longitude range 
-        - batchsize (int): batch size for DataLoader
-        - workers (int): number of DataLoader workers
-        - device (str): device to use
+        - batchsize (int): batch size for PyTorch DataLoader
+        - workers (int): number of PyTorch DataLoader workers
+        - device (str): device to use ('cpu' | 'cuda')
         Returns:
-        - dict: dictionary containing patch geometry, centers, datasets, loaders, and quadrature weights
+        - dict[str,object]: dictionary containing the patch geometry, valid centers, constructed datasets, 
+         dataloaders, and the quadrature-weight PyTorch tensor
         '''
-        geometry     = PatchGeometry(patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'])
-        commonkwargs = dict(num_workers=workers,pin_memory=(device=='cuda'),persistent_workers=(workers>0))
+        geometry = PatchGeometry(patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'])
+        kwargs   = dict(num_workers=workers,pin_memory=(device=='cuda'),persistent_workers=(workers>0))
         if workers>0:
             commonkwargs['prefetch_factor'] = 2
         centers  = {}
         datasets = {}
         loaders  = {}
-        quad = None
         for split,data in splitdata.items():
             centers[split]  = geometry.centers(data['target'],data['lats'],data['lons'],latrange,lonrange)
-            datasets[split] = PatchDataset(data['field'],data['local'],data['target'],centers[split],geometry,uselocal)
-            loaders[split]  = torch.utils.data.DataLoader(datasets[split],batch_size=batchsize,shuffle=(split=='train'),**commonkwargs)
-            if quad is None:
-                quad = data['quad']
+            datasets[split] = PatchDataset(geometry,centers[split],data['field'],data['local'],uselocal,data['target'])
+            loaders[split]  = torch.utils.data.DataLoader(datasets[split],batch_size=batchsize,shuffle=(split=='train'),**kwargs)
         return {
             'geometry':geometry,
             'centers':centers,
             'datasets':datasets,
             'loaders':loaders,
-            'quad':quad}
+            'quad':data['quad']}

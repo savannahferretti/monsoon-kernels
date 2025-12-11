@@ -8,7 +8,8 @@ class MainNN(torch.nn.Module):
         '''
         Purpose: Initialize a feed-forward neural network that nonlinearly maps a feature vector to a scalar prediction.
         Args:
-        - nfeatures (int): number of input features per sample (after any flattening, kernel integration, and/or concatenation)
+        - nfeatures (int): number of input features per sample (after any flattening, kernel integration, 
+          and/or concatenation with local inputs)
         '''
         super().__init__()
         nfeatures = int(nfeatures)
@@ -19,7 +20,7 @@ class MainNN(torch.nn.Module):
             torch.nn.Linear(64,32),         torch.nn.GELU(), torch.nn.Dropout(0.1),
             torch.nn.Linear(32,1))
 
-    def forward(self, X):
+    def forward(self,X):
         '''
         Purpose: Forward pass through MainNN.
         Args:
@@ -31,19 +32,19 @@ class MainNN(torch.nn.Module):
 
 class BaselineNN(torch.nn.Module):
 
-    def __init__(self,nfieldvars,patchshape,nlocalvars,uselocal):
+    def __init__(self,patchshape,nfieldvars,nlocalvars,uselocal):
         '''
         Purpose: Initialize a neural network that directly ingests space-height-time patches for one or more predictor 
         fields, then passes the patches plus optional local inputs to MainNN.
         Args:
-        - nfieldvars (int): number of predictor fields
         - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
+        - nfieldvars (int): number of predictor fields
         - nlocalvars (int): number of local inputs
         - uselocal (bool): whether to use local inputs
         '''
         super().__init__()
-        self.nfieldvars = int(nfieldvars)
         self.patchshape = tuple(int(x) for x in patchshape)
+        self.nfieldvars = int(nfieldvars)
         self.nlocalvars = int(nlocalvars)
         self.uselocal   = uselocal
         plats,plons,plevs,ptimes = self.patchshape
@@ -85,47 +86,47 @@ class KernelNN(torch.nn.Module):
         super().__init__()
         self.kernellayer = kernellayer
         self.nfieldvars  = int(kernellayer.nfieldvars)
-        self.nkernels    = int(kernellayer.nkernels)
-        self.kerneldims  = tuple(kernellayer.kerneldims)
         self.nlocalvars  = int(nlocalvars)
         self.uselocal    = uselocal
+        self.nkernels    = int(kernellayer.nkernels)
+        self.kerneldims  = tuple(kernellayer.kerneldims)
         nfeatures = self.nfieldvars*self.nkernels
         if self.uselocal:
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
 
-    def forward(self,patch,quad,local=None,returnfeatures=False):
+    def forward(self,patch,quad,local=None,getfeatures=False):
         '''
         Purpose: Forward pass through KernelNN.
         Args:
         - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - quad (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
         - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
-        - returnfeatures (bool): if True, return kernel-integrated features
+        - getfeatures (bool): if True, return kernel-integrated features
         Returns:
-        - torch.Tensor: predictions with shape (nbatch,) or tuple (predictions, features) if 'returnfeatures' is True
+        - torch.Tensor | tuple[torch.Tensor,torch.Tensor]: predictions with shape (nbatch,) or tuple (predictions, features) if 'getfeatures' is True
         '''
-        kernelfeatures = self.kernellayer(patch,quad)
+        features = self.kernellayer(patch,quad)
         if self.uselocal:
             if local is None:
                 raise ValueError('`local` must be provided when `uselocal` is True')
-            X = torch.cat([kernelfeatures,local],dim=1)
+            X = torch.cat([features,local],dim=1)
         else:
-            X = kernelfeatures
-        if returnfeatures:
-            return self.model(X),kernelfeatures
+            X = features
+        if getfeatures:
+            return self.model(X),features
         return self.model(X)
 
 class ModelFactory:
     
-    def build(name,modelconfig,nfieldvars,patchshape,nlocalvars):
+    def build(name,modelconfig,patchshape,nfieldvars,nlocalvars):
         '''
         Purpose: Build a model instance from configuration.
         Args:
         - name (str): model name
-        - modelconfig (dict): model configuration
+        - modelconfig (dict[str,str]): model configuration
+        - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
         - nfieldvars (int): number of predictor fields
-        - patchshape (?): (plats, plons, plevs, ptimes)
         - nlocalvars (int): number of local inputs
         Returns:
         - torch.nn.Module: initialized model
@@ -133,7 +134,7 @@ class ModelFactory:
         modeltype = modelconfig['type']
         uselocal  = modelconfig['uselocal']
         if modeltype=='baseline':
-            model = BaselineNN(nfieldvars,patchshape,nlocalvars,uselocal)
+            model = BaselineNN(patchshape,nfieldvars,nlocalvars,uselocal)
         elif modeltype=='nonparametric':
             nkernels    = modelconfig['nkernels']
             kerneldims  = modelconfig['kerneldims']
