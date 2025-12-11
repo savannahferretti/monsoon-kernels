@@ -44,8 +44,9 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     Returns:
     - torch.nn.Module: model with loaded state_dict on 'device' or None if checkpoint not found
     '''
+    filedir  = os.path.join(modeldir,kind)
     filename = f'{name}.pth'
-    filepath = os.path.join(modeldir,filename)
+    filepath = os.path.join(filedir,filename)
     if not os.path.exists(filepath):
         logger.error(f'   Checkpoint not found: {filepath}')
         return None

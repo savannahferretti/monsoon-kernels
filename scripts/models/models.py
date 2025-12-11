@@ -125,7 +125,7 @@ class ModelFactory:
         Purpose: Build a model instance from configuration.
         Args:
         - name (str): model name
-        - modelconfig (dict[str,str]): model configuration
+        - modelconfig (dict[str,object]): model configuration
         - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
         - nfieldvars (int): number of predictor fields
         - nlocalvars (int): number of local inputs

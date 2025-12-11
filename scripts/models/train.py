@@ -52,19 +52,21 @@ def initialize(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCA
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
     return model.to(device)
     
-def save(state,name,modeldir=MODELDIR):
+def save(state,name,kind,modeldir=MODELDIR):
     '''
     Purpose: Save best (lowest validation loss) model checkpoint, then verify by reopening.
     Args:
     - state (dict): model.state_dict() to save
-    - runname (str): model name
+    - name (str): model name
+    - kind (str): 'baseline' | 'nonparametric' | 'parametric'
     - modeldir (str): output directory (defaults to MODELDIR)
     Returns:
     - bool: True if save successful, False otherwise
     '''
-    os.makedirs(modeldir,exist_ok=True)
+    savedir = os.path.join(modeldir,kind)
+    os.makedirs(savedir,exist_ok=True)
     filename = f'{name}.pth'
-    filepath = os.path.join(modeldir,filename)
+    filepath = os.path.join(savedir,filename)
     logger.info(f'      Attempting to save {filename}...')
     try:
         torch.save(state,filepath)
@@ -75,12 +77,14 @@ def save(state,name,modeldir=MODELDIR):
         logger.exception('         Failed to save or verify')
         return False
 
-def fit(name,model,result,uselocal,device,project=PROJECT,batchsize=BATCHSIZE,lr=LR,patience=PATIENCE,criterion=CRITERION,epochs=EPOCHS,modeldir=MODELDIR):
+def fit(name,model,kind,result,uselocal,device,
+        project=PROJECT,batchsize=BATCHSIZE,lr=LR,patience=PATIENCE,criterion=CRITERION,epochs=EPOCHS,modeldir=MODELDIR):
     '''
     Purpose: Train a model with early stopping and learning rate scheduling, then save the best checkpoint.
     Args:
     - name (str): model name
     - model (torch.nn.Module): initialized model instance
+    - kind (str): 'baseline' | 'nonparametric' | 'parametric'
     - result (dict[str,object]): dictionary from DataModule.dataloaders()
     - uselocal (bool): whether to use local inputs
     - device (str): device to use
@@ -166,7 +170,7 @@ def fit(name,model,result,uselocal,device,project=PROJECT,batchsize=BATCHSIZE,lr
         'Training duration (s)':duration,
         'Stopped early':noimprove>=patience})
     if beststate is not None:
-        save(beststate,name)
+        save(beststate,name,kind)
     wandb.finish()
 
 def parse():
@@ -198,6 +202,7 @@ if __name__=='__main__':
     cachedresult = None
     for name,modelconfig in config.models.items():
         name = modelconfig['name']
+        kind = modelconfig['kind']
         if name not in models:
             continue
         logger.info(f'Running `{name}`...')
@@ -215,5 +220,5 @@ if __name__=='__main__':
         logger.info('   Initializing model....')
         model = initialize(name,modelconfig,result,device)
         logger.info('   Starting training....')
-        fit(name,model,result,uselocal,device)
+        fit(name,model,kind,result,uselocal,device)
         del model
