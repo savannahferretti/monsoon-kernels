@@ -2,14 +2,19 @@
 data/raw/*
 data/interim/*
 data/splits/*
-data/results/*
+data/predictions/*
+data/features/*
+data/weights/*
 !data/raw/.gitkeep
 !data/interim/.gitkeep
 !data/splits/.gitkeep
-!data/results/.gitkeep
+!data/predictions/.gitkeep
+!data/features/.gitkeep
+!data/weights/.gitkeep
 
 # Ignore specific folder types
 **/.ipynb_checkpoints/ 
+**/__pycache__/ 
 **/deprecated/
 **/wandb/
 
@@ -18,3 +23,5 @@ data/results/*
 *.h5
 *.pkl
 *.sh
+*.pth
+*.npz
