@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import torch
+from math import prod
 from kernels import NonparametricKernelLayer,ParametricKernelLayer
 
 class MainNN(torch.nn.Module):
@@ -44,33 +45,30 @@ class BaselineNN(torch.nn.Module):
         - uselocal (bool): whether to use local inputs
         '''
         super().__init__()
-        self.patchshape = tuple(int(x) for x in patchshape)
+        self.patchshape = patchshape
         self.nfieldvars = int(nfieldvars)
         self.nlocalvars = int(nlocalvars)
-        self.uselocal   = uselocal
-        plats,plons,plevs,ptimes = self.patchshape
-        nfeatures = self.nfieldvars*(plats*plons*plevs*ptimes)
+        self.uselocal   = bool(uselocal)
+        nfeatures = self.nfieldvars*prod(self.patchshape)
         if self.uselocal:
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
 
-    def forward(self,patch,local=None):
+    def forward(self,fieldpatch,localvalues=None):
         '''
         Purpose: Forward pass through BaselineNN.
-        Args:
-        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - localvalues (torch.Tensor | None): local input values with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
-        nbatch = patch.shape[0]
-        patch  = patch.reshape(nbatch,-1)
+        fieldpatch = fieldpatch.flatten(1)
         if self.uselocal:
-            if local is None:
-                raise ValueError('`local` must be provided when `uselocal` is True')
-            X = torch.cat([patch,local],dim=1)
+            if localvalues is None:
+                raise ValueError('`localvalues` must be provided when `uselocal` is True')
+            X = torch.cat([fieldpatch,localvalues],dim=1)
         else:
-            X = patch
+            X = fieldpatch
         return self.model(X)
 
 class KernelNN(torch.nn.Module):
@@ -88,7 +86,7 @@ class KernelNN(torch.nn.Module):
         self.kernellayer = kernellayer
         self.nfieldvars  = int(kernellayer.nfieldvars)
         self.nlocalvars  = int(nlocalvars)
-        self.uselocal    = uselocal
+        self.uselocal    = bool(uselocal)
         self.nkernels    = int(kernellayer.nkernels)
         self.kerneldims  = tuple(kernellayer.kerneldims)
         nfeatures = self.nfieldvars*self.nkernels
@@ -96,21 +94,22 @@ class KernelNN(torch.nn.Module):
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
 
-    def forward(self,patch,quad,local=None):
+    def forward(self,fieldpatch,quadpatch,localvalues=None):
         '''
         Purpose: Forward pass through KernelNN.
         Args:
-        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - quad (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
-        - local (torch.Tensor | None): local inputs with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - quadpatch (torch.Tensor): quadrature weights patch with shape (nbatch, plats, plons, plevs, ptimes)
+        - localvalues (torch.Tensor | None): local input values with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
-        - tuple[torch.Tensor,torch.Tensor]: predictions with shape (nbatch,) and kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
+        - tuple[torch.Tensor,torch.Tensor]: predictions with shape (nbatch,) and kernel-integrated features with shape 
+          (nbatch, nfieldvars*nkernels)
         '''
-        features = self.kernellayer(patch,quad)
+        features = self.kernellayer(fieldpatch,quadpatch)
         if self.uselocal:
-            if local is None:
-                raise ValueError('`local` must be provided when `uselocal` is True')
-            X = torch.cat([features,local],dim=1)
+            if localvalues is None:
+                raise ValueError('`localvalues` must be provided when `uselocal` is True')
+            X = torch.cat([features,localvalues],dim=1)
         else:
             X = features
         return self.model(X),features
@@ -130,7 +129,7 @@ class ModelFactory:
         Returns:
         - torch.nn.Module: initialized model
         '''
-        kind      = modelconfig['kind']
+        kind     = modelconfig['kind']
         uselocal = modelconfig['uselocal']
         if kind=='baseline':
             model = BaselineNN(patchshape,nfieldvars,nlocalvars,uselocal)
@@ -144,5 +143,7 @@ class ModelFactory:
             kerneldict  = modelconfig['kerneldict']
             kernellayer = ParametricKernelLayer(nfieldvars,nkernels,kerneldict)
             model = KernelNN(kernellayer,nlocalvars,uselocal)
+        else:
+            raise ValueError(f'Unknown model kind `{kind}`')
         model.nparams = sum(param.numel() for param in model.parameters())
         return model

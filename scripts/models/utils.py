@@ -6,9 +6,9 @@ class Config:
 
     def __init__(self,path='configs.json'):
         '''
-        Purpose: Load configs.json and expose commonly used blocks/paths as attributes.
+        Purpose: Load 'configs.json' and expose commonly used blocks/paths as attributes.
         '''
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path,'r',encoding='utf-8') as f:
             config = json.load(f)
             self.paths     = config['paths']
             self.variables = config['variables']

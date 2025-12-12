@@ -2,15 +2,13 @@
 
 import os
 import torch
-import wandb
 import logging
 import argparse
 import numpy as np
 import xarray as xr
 from utils import Config
 from dataset import DataModule
-from models import BaselineNN,KernelNN,ModelFactory
-from kernels import NonparametricKernelLayer,ParametricKernelLayer
+from models import ModelFactory
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -37,14 +35,15 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     - name (str): model name
     - modelconfig (dict): model configuration
     - result (dict[str,object]): dictionary from DataModule.dataloaders()
-    - device (str): 'cpu' | 'cuda'
+    - device (str): device to use
     - fieldvars (list[str]): predictor field variable names (defaults to FIELDVARS)
     - localvars (list[str]): local input variable names (defaults to LOCALVARS)
     - modeldir (str): directory containing checkpoints (defaults to MODELDIR)
     Returns:
     - torch.nn.Module: model with loaded state_dict on 'device' or None if checkpoint not found
     '''
-    filedir  = os.path.join(modeldir,modelconfig['kind'])
+    kind     = modelconfig['kind']
+    filedir  = os.path.join(modeldir,kind)
     filename = f'{name}.pth'
     filepath = os.path.join(filedir,filename)
     if not os.path.exists(filepath):
@@ -66,7 +65,7 @@ def inference(model,split,result,uselocal,device):
     - split (str): 'valid' | 'test'
     - result (dict[str,object]): dictionary from DataModule.dataloaders()
     - uselocal (bool): whether to use local inputs
-    - device (str): 'cpu' | 'cuda'
+    - device (str): device to use
     Returns:
     - xr.DataArray: predicted precipitation DataArray
     '''
@@ -76,18 +75,213 @@ def inference(model,split,result,uselocal,device):
     featureslist = []
     with torch.no_grad():
         for batch in dataloader:
-            patch = batch['patch'].to(device)
-            local = batch['local'].to(device) if uselocal else None
+            fieldpatch  = batch['fieldpatch'].to(device)
+            quadpatch   = batch['quadpatch'].to(device)
+            localvalues = batch['localvalues'].to(device) if uselocal else None
             if hasattr(model,'kernellayer'):
-                quad = result['quad'].to(device)
-                output,feature = model(patch,quad,local)
-                featureslist.append(feature.cpu().numpy())
+                outputvalues,features = model(fieldpatch,quadpatch,localvalues)
+                featureslist.append(features.cpu().numpy())
             else:
-                output = model(patch,local)
-            outputslist.append(output.cpu().numpy())
+                outputvalues = model(fieldpatch,localvalues)
+            outputslist.append(outputvalues.cpu().numpy())
     predictions = np.concatenate(outputslist,axis=0)
     features    = np.concatenate(featureslist,axis=0) if featureslist else None
     return predictions,features
+
+
+def scatter(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,nonparam=None,fieldvars=FIELDVARS):
+    """
+    Purpose
+    -------
+    Scatter patched outputs (predictions/features) onto a full ref grid, or slice kernel weights
+    down to the requested kerneldims, returning numpy array(s) plus xarray dimension metadata.
+
+    Args
+    ----
+    data (np.ndarray):
+        Model output: predictions, integrated features, or weights.
+    kind (str):
+        One of {'predictions','features','weights'}.
+    centers (list[tuple[int,int,int]] | None):
+        Patch centers (latidx, lonidx, timeidx). Required for predictions/features.
+    refda (xr.DataArray | None):
+        Reference grid/coords (lat, lon, time, ...). Required for predictions/features.
+    nkernels (int | None):
+        Number of kernels/members. Required for features; required for ensemble predictions.
+    kerneldims (list[str] | tuple[str] | None):
+        Kernel-varying dims (subset of {'lat','lon','lev','time'}). Required for weights.
+    nonparam (bool | None):
+        Whether kernel is nonparametric.
+    fieldvars (list[str]):
+        Predictor names for features/weights.
+
+    Returns
+    -------
+    tuple[dict, dict]:
+        spec, attrs
+
+        spec:
+          - "arrays": dict[str, np.ndarray]  (varname -> array)
+          - "dims":   dict[str, tuple[str,...]]
+          - "coords": dict[str, dict]
+        attrs:
+          - dict[str, dict] (varname -> attrs dict)
+    """
+    if kind not in {"predictions", "features", "weights"}:
+        raise ValueError("`kind` must be one of {'predictions','features','weights'}")
+
+    spec  = {'arrs':{},'dims':{},'coords':{}}
+    attrs = {}
+
+    if kind in {"predictions", "features"}:
+        if refda is None or centers is None:
+            raise ValueError("`refda` and `centers` required for prediction/feature reformatting")
+        latidxs, lonidxs, timeidxs = map(np.asarray, zip(*centers))
+
+    if kind == "predictions":
+        isensemble = bool(nonparam) and (nkernels is not None) and data.ndim == 2 and data.shape[1] == nkernels
+        if isensemble:
+            arr = np.full((nkernels, *refda.shape), np.nan, dtype=refda.dtype)
+            arr[:, latidxs, lonidxs, timeidxs] = data.T
+            dims = ("member",) + refda.dims
+            coords = {"member": np.arange(nkernels), **refda.coords}
+        else:
+            arr = np.full(refda.shape, np.nan, dtype=refda.dtype)
+            arr[latidxs, lonidxs, timeidxs] = data
+            dims = refda.dims
+            coords = dict(refda.coords)
+
+        spec["arrays"]["pr"] = arr
+        spec["dims"]["pr"] = dims
+        spec["coords"]["pr"] = coords
+        attrs["pr"] = {
+            "long_name": "Predicted precipitation rate (log1p-transformed and standardized)",
+            "units": "N/A",
+        }
+        return spec, attrs
+
+    if kind == "features":
+        if nkernels is None:
+            raise ValueError("`nkernels` required for feature reformatting")
+        if data.shape[1] != len(fieldvars) * nkernels:
+            raise ValueError("`data.shape[1]` must equal len(fieldvars) × nkernels")
+
+        vals = data.reshape(len(centers), len(fieldvars), nkernels)  # (center, field, member)
+
+        if nonparam:
+            # arr: (member, field, ...grid...)
+            arr = np.full((nkernels, len(fieldvars), *refda.shape), np.nan, dtype=refda.dtype)
+            arr[:, :, latidxs, lonidxs, timeidxs] = vals.transpose(2, 1, 0)
+
+            dims = ("member",) + refda.dims
+            coords = {"member": np.arange(nkernels), **refda.coords}
+
+            for i, varname in enumerate(fieldvars):
+                spec["arrays"][varname] = arr[:, i, ...]
+                spec["dims"][varname] = dims
+                spec["coords"][varname] = coords
+                attrs[varname] = {
+                    "long_name": f"{varname} (kernel-integrated and standardized)",
+                    "units": "N/A",
+                }
+        else:
+            # deterministic => use member/kernel 0 only
+            arr = np.full((len(fieldvars), *refda.shape), np.nan, dtype=refda.dtype)
+            arr[:, latidxs, lonidxs, timeidxs] = vals[:, :, 0].T  # (field, center) -> (field, lat, lon, time)
+
+            dims = refda.dims
+            coords = dict(refda.coords)
+
+            for i, varname in enumerate(fieldvars):
+                spec["arrays"][varname] = arr[i, ...]
+                spec["dims"][varname] = dims
+                spec["coords"][varname] = coords
+                attrs[varname] = {
+                    "long_name": f"{varname} (kernel-integrated and standardized)",
+                    "units": "N/A",
+                }
+
+        return spec, attrs
+
+
+    if kerneldims is None:
+        raise ValueError("`kerneldims` required for weight reformatting")
+
+    kerneldims = tuple(kerneldims)
+    base = ("lat", "lon", "lev", "time")
+    kept = tuple(d for d in base if d in kerneldims)
+
+    if nonparam:
+        # expected (field, member, lat, lon, lev, time)
+        alldims = ("field", "member") + base
+        if data.ndim != len(alldims):
+            raise ValueError(f"Nonparam weights expected {len(alldims)}D array shaped like {alldims}")
+
+        indexer = tuple(
+            slice(None) if (d in ("field", "member") or d in kerneldims) else 0
+            for d in alldims
+        )
+        weights = data[indexer]
+        dims = ("field", "member") + kept
+        coords = {"field": fieldvars, "member": np.arange(weights.shape[1])}
+        for ax, d in enumerate(dims[2:], start=2):
+            coords[d] = np.arange(weights.shape[ax])
+    else:
+        # expected (field, lat, lon, lev, time); if (field, nkernels, ...) drop nkernels axis
+        if data.ndim == 6:
+            data = data[:, 0, ...]
+        alldims = ("field",) + base
+        if data.ndim != len(alldims):
+            raise ValueError(f"Parametric weights expected {len(alldims)}D array shaped like {alldims}")
+
+        indexer = tuple(slice(None) if (d == "field" or d in kerneldims) else 0 for d in alldims)
+        weights = data[indexer]
+        dims = ("field",) + kept
+        coords = {"field": fieldvars}
+        for ax, d in enumerate(dims[1:], start=1):
+            coords[d] = np.arange(weights.shape[ax])
+
+    spec["arrays"]["weights"] = weights
+    spec["dims"]["weights"] = dims
+    spec["coords"]["weights"] = coords
+    attrs["weights"] = {
+        "long_name": "Nonparametric kernel weights" if nonparam else "Parametric kernel weights",
+        "units": "N/A",
+    }
+    return spec, attrs
+
+
+def dataset(spec attrs):
+    """
+    Purpose
+    -------
+    Build an xr.Dataset from scatter() output.
+
+    Args
+    ----
+    spec (dict):
+        Output from scatter(): dict with keys {"arrays","dims","coords"}.
+        Each is a mapping varname -> array/dims/coords.
+    attrs (dict[str, dict]):
+        Mapping varname -> attrs dict (e.g., {"long_name": ..., "units": ...}).
+
+    Returns
+    -------
+    xr.Dataset
+        Dataset containing each variable as an xr.DataArray with the requested dims/coords/attrs.
+    """
+    ds = xr.Dataset()
+    for name, arr in spec["arrays"].items():
+        da = xr.DataArray(arr, dims=spec["dims"][name], coords=spec["coords"][name], name=name)
+        da.attrs = attrs.get(name, {})
+        ds[name] = da
+    return ds
+
+
+
+
+
+
 
 def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,nonparam=False,fieldvars=FIELDVARS):
     '''

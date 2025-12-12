@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import torch
-import logging
 import numpy as np
 
 class NonparametricKernelLayer(torch.nn.Module):
@@ -21,40 +20,38 @@ class NonparametricKernelLayer(torch.nn.Module):
         self.kernel     = None
 
     @torch.no_grad()
-    def weights(self,quad,device,asarray=False):
+    def weights(self,quadpatch,device,asarray=False):
         '''
         Purpose: Obtain normalized non-parametric kernel weights over a patch.
         Args:
-        - quad (torch.Tensor): quadrature weights of shape (plats, plons, plevs, ptimes)
-        - device (str): device to use ('cpu' | 'cuda')
+        - quadpatch (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
+        - device (str | torch.device): device to use
         - asarray (bool): if True, return a NumPy array
         Returns:
         - torch.Tensor | np.ndarray: normalized kernel weights of shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
         '''
+        quadpatch = quadpatch.to(device)
         if self.kernel is None:
-            plats,plons,plevs,ptimes = quad.shape
-            kernelshape = [size if dim in self.kerneldims else 1 for dim,size in zip(('lat','lon','lev','time'),(plats,plons,plevs,ptimes))]
-            self.kernel = torch.nn.Parameter(torch.ones(self.nfieldvars,self.nkernels,*kernelshape,device=device,dtype=quad.dtype))
-        kernel = self.kernel
-        quad   = quad.to(device)
-        integral = torch.einsum('fkyxpt,yxpt->fk',kernel,quad)+1e-4
-        weights  = kernel/integral[:,:,None,None,None,None]
+            kernelshape = [size if dim in self.kerneldims else 1 for dim,size in zip(('lat','lon','lev','time'),quadpatch.shape)]
+            self.kernel = torch.nn.Parameter(torch.ones(self.nfieldvars,self.nkernels,*kernelshape,dtype=quadpatch.dtype,device=device))
+        integral = torch.einsum('fkyxpt,yxpt->fk',self.kernel,quadpatch)+1e-4
+        weights  = self.kernel/integral[:,:,None,None,None,None]
         if asarray:
             return weights.detach().cpu().numpy()
         return weights
         
-    def forward(self,patch,quad):
+    def forward(self,fieldpatch,quadpatch):
         '''
         Purpose: Apply learned non-parametric kernels to a batch of patches and compute kernel-integrated features.
         Args:
-        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - quad (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - quadpatch (torch.Tensor): quadrature weights patch with shape (nbatch, plats, plons, plevs, ptimes)
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
         '''
-        weights  = self.weights(quad,patch.device,asarray=False)
-        features = torch.einsum('bfyxpt,fkyxpt,yxpt->bfk',patch,weights,quad)
-        return features.reshape(patch.shape[0],self.nfieldvars*self.nkernels)
+        weights  = self.weights(quadpatch.mean(dim=0),fieldpatch.device,asarray=False) 
+        features = torch.einsum('bfyxpt,fkyxpt,byxpt->bfk',fieldpatch,weights,quadpatch) 
+        return features.flatten(1)
 
 class ParametricKernelLayer(torch.nn.Module):
          
@@ -75,16 +72,17 @@ class ParametricKernelLayer(torch.nn.Module):
 
         def forward(self,length,device):
             '''
-            Purpose: Evaluate Gaussian kernel along a symmetric coordinate in [-1,1].
+            Purpose: Evaluate a Gaussian kernel along a symmetric coordinate in [-1,1].
             Args:
             - length (int): number of points along the axis
-            - device (str): device to use ('cpu' | 'cuda')
+            - device (str | torch.device): device to use
             Returns:
             - torch.Tensor: Gaussian kernel values with shape (nfieldvars, nkernels, length)
             '''
-            coord = torch.linspace(-1.0,1.0,steps=length,device=device)
-            std   = torch.exp(self.logstd)
-            return torch.exp(-0.5*((coord[None,None,:]-self.mean[...,None])/std[...,None])**2)
+            coord    = torch.linspace(-1.0,1.0,steps=length,device=device)
+            std      = torch.exp(self.logstd)
+            kernel1D = torch.exp(-0.5*((coord[None,None,:]-self.mean[...,None])/std[...,None])**2)
+            return kernel1D
 
     class ExponentialKernel(torch.nn.Module):
 
@@ -102,16 +100,17 @@ class ParametricKernelLayer(torch.nn.Module):
 
         def forward(self,length,device):
             '''
-            Purpose: Evaluate causal exponential kernel along non-negative coordinate [0,1,2,...].
+            Purpose: Evaluate an exponential kernel along non-negative coordinate [0,1,2,...].
             Args:
             - length (int): number of points along the axis
-            - device (str): device to use ('cpu' | 'cuda')
+            - device (str | torch.device): device to use
             Returns:
             - torch.Tensor: exponential kernel values with shape (nfieldvars, nkernels, length)
             '''
-            coord = torch.arange(length,device=device)
-            tau   = torch.exp(self.logtau)+1e-4
-            return torch.exp(-coord[None,None,:]/tau[...,None])
+            coord    = torch.arange(length,device=device)
+            tau      = torch.exp(self.logtau)+1e-4
+            kernel1D = torch.exp(-coord[None,None,:]/tau[...,None])
+            return kernel1D
 
     def __init__(self,nfieldvars,nkernels,kerneldict):
         '''
@@ -124,8 +123,8 @@ class ParametricKernelLayer(torch.nn.Module):
         super().__init__()
         self.nfieldvars = int(nfieldvars)
         self.nkernels   = int(nkernels)
-        self.kerneldims = tuple(kerneldict.keys())
         self.kerneldict = dict(kerneldict)
+        self.kerneldims = tuple(kerneldict.keys())
         self.functions  = torch.nn.ModuleDict()
         for dim,function in self.kerneldict.items():
             if function=='gaussian':
@@ -136,43 +135,41 @@ class ParametricKernelLayer(torch.nn.Module):
                 raise ValueError(f'Unknown function type `{function}`; must be either `gaussian` or `exponential`')
 
     @torch.no_grad()
-    def weights(self,quad,device,asarray=False):
+    def weights(self,quadpatch,device,asarray=False):
         '''
         Purpose: Obtain normalized parametric kernel weights over a patch.
         Args:
-        - quad (torch.Tensor): quadrature weights of shape (plats, plons, plevs, ptimes)
-        - device (str): device to use ('cpu' | 'cuda')
+        - quadpatch (torch.Tensor): quadrature weights of shape (plats, plons, plevs, ptimes)
+        - device (str | torch.device): device to use
         - asarray (bool): if True, return a NumPy array
         Returns:
         - torch.Tensor | np.ndarray: normalized kernel weights of shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
         '''
-        (plats,plons,plevs,ptimes) = quad.shape
-        quad   = quad.to(device)
-        kernel = torch.ones(self.nfieldvars,self.nkernels,plats,plons,plevs,ptimes,device=device,dtype=quad.dtype)
+        quadpatch = quadpatch.to(device)
+        kernel = torch.ones(self.nfieldvars,self.nkernels,*quadpatch.shape,dtype=quadpatch.dtype,device=device)
         for ax,dim in enumerate(('lat','lon','lev','time'),start=2):
             if dim not in self.kerneldims:
                 continue
-            dimlength = kernel.shape[ax]
-            function  = self.functions[dim]
-            kernel1D  = function(dimlength,device)
-            kernelshape     = [self.nfieldvars,self.nkernels,1,1,1,1]
-            kernelshape[ax] = dimlength
-            kernel          = kernel*kernel1D.view(*kernelshape)
-        integral = torch.einsum('fkyxpt,yxpt->fk',kernel,quad)+1e-4
+            kernel1D = self.functions[dim](kernel.shape[ax],device)
+            view     = [1]*kernel.ndim
+            view[:2] = (self.nfieldvars,self.nkernels)
+            view[ax] = kernel.shape[ax]
+            kernel   = kernel*kernel1D.view(*view)
+        integral = torch.einsum('fkyxpt,yxpt->fk',kernel,quadpatch)+1e-4
         weights  = kernel/integral[:,:,None,None,None,None]
         if asarray:
             return weights.detach().cpu().numpy()
         return weights
         
-    def forward(self,patch,quad):
+    def forward(self,fieldpatch,quadpatch):
         '''
         Purpose: Apply learned parametric kernels to a batch of patches and compute kernel-integrated features.
         Args:
-        - patch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - quad (torch.Tensor): quadrature weights with shape (plats, plons, plevs, ptimes)
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - quadpatch (torch.Tensor): quadrature weights patch with shape (nbatch, plats, plons, plevs, ptimes)
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
         '''
-        weights  = self.weights(quad,patch.device,asarray=False)
-        features = torch.einsum('bfyxpt,fkyxpt,yxpt->bfk',patch,weights,quad)
-        return features.reshape(patch.shape[0],self.nfieldvars*self.nkernels)
+        weights  = self.weights(quadpatch.mean(dim=0),fieldpatch.device,asarray=False) 
+        features = torch.einsum('bfyxpt,fkyxpt,byxpt->bfk',fieldpatch,weights,quadpatch) 
+        return features.flatten(1)
