@@ -100,7 +100,7 @@ def fit(name,model,kind,result,uselocal,device,
     validloader = result['loaders']['valid']
     optimizer = torch.optim.Adam(model.parameters(),lr=lr)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,max_lr=lr,epochs=epochs,steps_per_epoch=len(trainloader),pct_start=0.2,anneal_strategy='cos',div_factor=10,final_div_factor=100)
+        optimizer,max_lr=1e-3,epochs=epochs,steps_per_epoch=len(trainloader),pct_start=0.1,anneal_strategy='cos')
     wandb.init(project=project,name=name,
                config={
                    'Epochs':epochs,
@@ -132,6 +132,7 @@ def fit(name,model,kind,result,uselocal,device,
             loss   = criterion(output,target)
             loss.backward()
             optimizer.step()
+            scheduler.step() 
             totalloss += loss.item()*len(target)
         trainloss = totalloss/len(trainloader.dataset)
         model.eval()
@@ -200,25 +201,56 @@ if __name__=='__main__':
     splitdata    = DataModule.prepare(['train','valid'],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
     cachedconfig = None
     cachedresult = None
-    for name,modelconfig in config.models.items():
+    for modelconfig in config.models:
         name = modelconfig['name']
         kind = modelconfig['kind']
         if models is not None and name not in models:
             continue
         logger.info(f'Running `{name}`...')
-        patchconfig   = modelconfig['patch']
-        uselocal      = modelconfig['uselocal']
-        currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
-        if currentconfig==cachedconfig:
-            logger.info('   Reusing cached datasets and loaders...')
-            result = cachedresult
-        else:
-            logger.info('   Building new datasets and loaders....')
-            result = DataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)
-            cachedconfig = currentconfig
-            cachedresult = result
-        logger.info('   Initializing model....')
-        model = initialize(name,modelconfig,result,device)
-        logger.info('   Starting training....')
-        fit(name,model,kind,result,uselocal,device)
-        del model
+        
+        try:
+            patchconfig   = modelconfig['patch']
+            uselocal      = modelconfig['uselocal']
+            currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
+            if currentconfig==cachedconfig:
+                logger.info('   Reusing cached datasets and loaders...')
+                result = cachedresult
+            else:
+                logger.info('   Building new datasets and loaders....')
+                result = DataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)
+                cachedconfig = currentconfig
+                cachedresult = result
+            logger.info('   Initializing model....')
+            model = initialize(name,modelconfig,result,device)
+            logger.info('   Starting training....')
+            fit(name,model,kind,result,uselocal,device)
+        except Exception:
+            logger.exception(f'`{name}` crashed...skipping to next model')
+            try:
+                wandb.finish()
+            except Exception:
+                pass
+        finally:
+            try:
+                del model
+            except Exception:
+                pass
+            if device=='cuda':
+                torch.cuda.empty_cache()
+                
+        # patchconfig   = modelconfig['patch']
+        # uselocal      = modelconfig['uselocal']
+        # currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
+        # if currentconfig==cachedconfig:
+        #     logger.info('   Reusing cached datasets and loaders...')
+        #     result = cachedresult
+        # else:
+        #     logger.info('   Building new datasets and loaders....')
+        #     result = DataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)
+        #     cachedconfig = currentconfig
+        #     cachedresult = result
+        # logger.info('   Initializing model....')
+        # model = initialize(name,modelconfig,result,device)
+        # logger.info('   Starting training....')
+        # fit(name,model,kind,result,uselocal,device)
+        # del model

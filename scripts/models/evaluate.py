@@ -160,7 +160,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
             for ax,dim in enumerate(dims[2:],start=2):
                 coords[dim] = np.arange(weights.shape[ax])
             da = xr.DataArray(weights,dims=dims,coords=coords,name='weights')
-            da.attrs = dict(long_name='Nonparametric kernel weights',units='0-1')
+            da.attrs = dict(long_name='Nonparametric kernel weights',units='N/A')
             return da.to_dataset()
         else:
             nfieldvars,nkernels,plats,plons,plevs,ptimes = data.shape
@@ -171,7 +171,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
             for ax,dim in enumerate(dims[1:],start=1):
                 coords[dim] = np.arange(weights.shape[ax])
             da = xr.DataArray(weights,dims=dims,coords=coords,name='weights')
-            da.attrs = dict(long_name=f'Parametric kernel weights',units='0-1')
+            da.attrs = dict(long_name=f'Parametric kernel weights',units='N/A')
             return da.to_dataset()
 
 def save(name,ds,kind,split,savedir):
@@ -229,7 +229,7 @@ if __name__=='__main__':
     splitdata = DataModule.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
     cachedconfig = None
     cachedresult = None
-    for name,modelconfig in config.models.items():
+    for modelconfig in config.models:
         name = modelconfig['name']
         if models is not None and name not in models:
             continue
