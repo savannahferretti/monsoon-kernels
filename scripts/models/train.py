@@ -1,28 +1,32 @@
 #!/usr/bin/env python
 
 import os
+import sys  
 import time
 import torch
 import wandb
 import logging
 import argparse
 import numpy as np
+
+
+sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import Config
-from models import ModelFactory
-from dataset import InputDataModule
+from architectures import ModelFactory 
+from data.inputs import InputDataModule
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
 
 config = Config()
-SPLITDIR  = config.splitdir
-MODELDIR  = config.modeldir
+SPLITDIR  = config.splitsdir 
+MODELDIR  = config.modelsdir
 FIELDVARS = config.fieldvars
 LOCALVARS = config.localvars
 TARGETVAR = config.targetvar
 LATRANGE  = config.latrange
 LONRANGE  = config.lonrange
-PROJECT   = config.project
+PROJECT   = config.projectname 
 SEED      = config.seed
 BATCHSIZE = config.batchsize
 WORKERS   = config.workers
@@ -147,17 +151,17 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
             fieldpatch   = batch['fieldpatch'].to(device)
             quadpatch    = batch['quadpatch'].to(device)
             localvalues  = batch['localvalues'].to(device) if uselocal else None
-            targetvalues = batch['targetvalues'].to(device)
+            targetvalue = batch['targetvalue'].to(device)  # FIXED: was targetvalues (plural)
             optimizer.zero_grad()
             if hasattr(model,'kernellayer'):
                 outputvalues,_ = model(fieldpatch,quadpatch,localvalues)
             else:
                 outputvalues = model(fieldpatch,localvalues)
-            loss   = criterion(outputvalues,targetvalues)
+            loss   = criterion(outputvalues,targetvalue)  # FIXED: was targetvalues
             loss.backward()
             optimizer.step()
             scheduler.step() 
-            totalloss += loss.item()*len(targetvalues)
+            totalloss += loss.item()*len(targetvalue)  # FIXED: was targetvalues
         trainloss = totalloss/len(trainloader.dataset)
         model.eval()
         totalloss = 0.0
@@ -166,13 +170,13 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
                 fieldpatch   = batch['fieldpatch'].to(device)
                 quadpatch    = batch['quadpatch'].to(device)
                 localvalues  = batch['localvalues'].to(device) if uselocal else None
-                targetvalues = batch['targetvalues'].to(device)
+                targetvalue = batch['targetvalue'].to(device)  # FIXED: was targetvalues
                 if hasattr(model,'kernellayer'):
                     outputvalues,_ = model(fieldpatch,quadpatch,localvalues)
                 else:
                     outputvalues = model(fieldpatch,localvalues)
-                loss   = criterion(outputvalues,targetvalues)
-                totalloss += loss.item()*len(targetvalues)
+                loss   = criterion(outputvalues,targetvalue)  # FIXED: was targetvalues
+                totalloss += loss.item()*len(targetvalue)  # FIXED: was targetvalues
         validloss = totalloss/len(validloader.dataset)
         if validloss<bestloss:
             beststate = {key:value.detach().cpu().clone() for key,value in model.state_dict().items()}

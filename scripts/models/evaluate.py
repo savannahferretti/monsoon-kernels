@@ -1,22 +1,25 @@
 #!/usr/bin/env python
 
 import os
+import sys  
 import torch
 import logging
 import argparse
 import numpy as np
 import xarray as xr
+
+sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import Config
-from dataset import DataModule
-from models import ModelFactory
+from data.inputs import InputDataModule 
+from architectures import ModelFactory  
 from kernels import NonparametricKernelLayer,ParametricKernelLayer
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
 
 config = Config()
-SPLITDIR   = config.splitdir
-MODELDIR   = config.modeldir
+SPLITDIR   = config.splitsdir  
+MODELDIR   = config.modelsdir  
 PREDSDIR   = config.predsdir
 FEATSDIR   = config.featsdir
 WEIGHTSDIR = config.weightsdir
@@ -35,7 +38,7 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     Args:
     - name (str): model name
     - modelconfig (dict): model configuration
-    - result (dict[str,object]): dictionary from DataModule.dataloaders()
+    - result (dict[str,object]): dictionary from InputDataModule.dataloaders()  
     - device (str): device to use
     - fieldvars (list[str]): predictor field variable names (defaults to FIELDVARS)
     - localvars (list[str]): local input variable names (defaults to LOCALVARS)
@@ -64,7 +67,7 @@ def inference(model,split,result,uselocal,device):
     Args:
     - model (torch.nn.Module): trained model instance 
     - split (str): 'valid' | 'test'
-    - result (dict[str,object]): dictionary from DataModule.dataloaders()
+    - result (dict[str,object]): dictionary from InputDataModule.dataloaders()
     - uselocal (bool): whether to use local inputs
     - device (str): device to use
     Returns:
@@ -131,7 +134,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
         ds   = xr.Dataset()
         if nonparam:
             arr = np.full((nkernels,len(fieldvars),nlats,nlons,ntimes),np.nan,dtype=np.float32)
-            for i,(latidx,lonidx,timidx) in enumerate(centers):
+            for i,(latidx,lonidx,timeidx) in enumerate(centers):
                 arr[:,:,latidx,lonidx,timidx] = data[i].transpose(1,0)
             for fieldidx,varname in enumerate(fieldvars):
                 da = xr.DataArray(arr[:,fieldidx,...],dims=('member',)+refda.dims,coords={'member':np.arange(nkernels),**refda.coords},name=varname)
@@ -140,7 +143,7 @@ def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,n
         else:
             data = data[...,0]
             arr  = np.full((len(fieldvars),nlats,nlons,ntimes),np.nan,dtype=np.float32)
-            for i,(latidx,lonidx,timidx) in enumerate(centers):
+            for i,(latidx,lonidx,timeidx) in enumerate(centers):
                 arr[:,latidx,lonidx,timidx] = data[i]
             for fieldidx,varname in enumerate(fieldvars):
                 da = xr.DataArray(arr[fieldidx,...],refda.dims,coords=refda.coords,name=varname)
@@ -226,7 +229,7 @@ if __name__=='__main__':
     models = [m.strip() for m in args.models.split(',')] if args.models!='all' else None
     split  = args.split
     logger.info('Preparing evaluation split...')
-    splitdata = DataModule.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
+    splitdata = InputDataModule.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)  # FIXED: was DataModule
     cachedconfig = None
     cachedresult = None
     for modelconfig in config.models:
@@ -242,7 +245,7 @@ if __name__=='__main__':
             result = cachedresult
         else:
             logger.info('   Building new datasets and loaders....')
-            result = DataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)
+            result = InputDataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)  # FIXED: was DataModule
             cachedconfig = currentconfig
             cachedresult = result
         logger.info('   Initializing model and populating trained weights....')
@@ -251,14 +254,14 @@ if __name__=='__main__':
         predictions,features = inference(model,split,result,uselocal,device)
         logger.info('Saving outputs...')
         centers   = result['centers'][split]
-        refda     = splitdata[split]['ds'][TARGETVAR]
+        refda     = splitdata[split]['refda']  # FIXED: was splitdata[split]['ds'][TARGETVAR]
         haskernel = hasattr(model,'kernellayer')
         nonparam  = haskernel and isinstance(model.kernellayer,NonparametricKernelLayer)
         nkernels  = model.kernellayer.nkernels if haskernel else 1
         ds = reformat(predictions,kind='predictions',centers=centers,refda=refda,nkernels=nkernels,nonparam=nonparam)
         save(name,ds,'predictions',split,PREDSDIR)
         if haskernel:
-            weights = model.kernellayer.weights(result['quad'],device,asarray=True)
+            weights = model.kernellayer.weights(result['geometry'].quad,device,asarray=True)  # FIXED: was result['quad']
             ds = reformat(weights,kind='weights',nkernels=nkernels,kerneldims=model.kernellayer.kerneldims,nonparam=nonparam)
             save(name,ds,'weights',split,WEIGHTSDIR)
             if features is not None:

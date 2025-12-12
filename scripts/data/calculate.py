@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 
 import os
+import sys
 import xesmf
 import logging
 import warnings
 import numpy as np
 import xarray as xr
-from utils import Config
 from datetime import datetime
+
+sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import Config
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -20,6 +23,14 @@ FILEDIR  = config.rawdir
 SAVEDIR  = config.interimdir
 LATRANGE = config.latrange
 LONRANGE = config.lonrange
+
+# class DataCalculator:
+#     def __init__(self, config):
+#         self.config = config
+    
+#     def calculate_thermodynamics(self): ...
+#     def calculate_quadrature_weights(self): ...
+#     def regrid(self, da, target_grid): ...
 
 def retrieve(longname,filedir=FILEDIR):
     '''

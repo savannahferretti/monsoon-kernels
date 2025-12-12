@@ -14,36 +14,37 @@ class Config:
             self.metadata  = config['metadata']
             self.domain    = config['domain']
             self.splits    = config['splits']
-            self.variables = config['splits']
+            self.variables = config['variables'] 
             self.training  = config['training']
+            self.models    = config['models']  
             
     @property 
     def rawdir(self):
-        return self.paths['ra']
+        return self.filepaths['raw'] 
         
     @property 
     def interimdir(self):
-        return self.paths['interim']
+        return self.filepaths['interim']  
         
     @property 
     def splitsdir(self):
-        return self.paths['splits']
+        return self.filepaths['splits']  
         
     @property 
     def predsdir(self):
-        return self.paths['predictions']
+        return self.filepaths['predictions'] 
     
     @property 
     def featsdir(self):
-        return self.paths['features']
+        return self.filepaths['features']  
 
     @property 
     def weightsdir(self):
-        return self.paths['weights']
+        return self.filepaths['weights'] 
 
     @property 
     def modelsdir(self):
-        return self.paths['models']
+        return self.filepaths['models']  
 
     @property 
     def author(self):
@@ -93,15 +94,15 @@ class Config:
 
     @property
     def fieldvars(self):
-        return self.variables['fieldvars']
+        return self.variables['field'] 
 
     @property
     def localvars(self):
-        return self.variables['localvars']
+        return self.variables['local']  
 
     @property
     def targetvar(self):
-        return self.variables['targetvar']
+        return self.variables['target']  
         
     @property
     def projectname(self):
