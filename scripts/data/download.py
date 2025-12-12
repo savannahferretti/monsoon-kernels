@@ -24,11 +24,11 @@ config = Config()
 AUTHOR   = config.author
 EMAIL    = config.email
 SAVEDIR  = config.rawdir
-YEARS    = config.years
-MONTHS   = config.months
 LATRANGE = config.latrange
 LONRANGE = config.lonrange
 LEVRANGE = config.levrange
+YEARS    = config.years
+MONTHS   = config.months
 
 def retrieve_era5():
     '''
