@@ -1,16 +1,13 @@
 #!/usr/bin/env python
 
 import os
-import sys
 import xesmf
 import logging
 import warnings
 import numpy as np
 import xarray as xr
 from datetime import datetime
-
-sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import Config
+from scripts.utils import Config
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -23,14 +20,6 @@ FILEDIR  = config.rawdir
 SAVEDIR  = config.interimdir
 LATRANGE = config.latrange
 LONRANGE = config.lonrange
-
-# class DataCalculator:
-#     def __init__(self, config):
-#         self.config = config
-    
-#     def calculate_thermodynamics(self): ...
-#     def calculate_quadrature_weights(self): ...
-#     def regrid(self, da, target_grid): ...
 
 def retrieve(longname,filedir=FILEDIR):
     '''
@@ -164,12 +153,14 @@ def calc_thetae(p,t,q=None):
 
 def calc_quadrature_weights(refda,rearth=6.371e6):
     '''
-    Purpose: Compute ΔA Δp Δt quadrature weights for a 4D grid.
+    Purpose: Compute seperable quadrature components; ΔA(lat, lon), Δp(lev), and Δt(time); for a 4D grid.
+    Note that Δt is computed as a single global cadence (median of time differences) then broadcast 
+    constant over time to remain robust to seasonal gaps.
     Args:
     - refda (xr.DataArray): reference DataArray containing 'lat', 'lon', 'lev', and 'time'
     - rearth (float): Earth's radius in meters (defaults to 6,371,000)
     Returns:
-    - xr.DataArray: quadrature weights with dims ('lat', 'lon', 'lev', 'time')
+    - tuple(xr.DataArray,xr.DataArray,xr.DataArray): DataArrays of horizontal area, vertical thickness, and time step weights
     '''
     dims  = ('lat','lon','lev','time')
     refda = refda.transpose(*dims)
@@ -186,19 +177,21 @@ def calc_quadrature_weights(refda,rearth=6.371e6):
         Returns:
         - np.ndarray: 1D array of estimated spacing between grid points with the same length as 'coord'
         '''
-        spacing = np.empty_like(coord)
-        spacing[1:-1] = 0.5*(coord[2:]-coord[:-2])
-        spacing[0]    = coord[1]-coord[0]
-        spacing[-1]   = coord[-1]-coord[-2]
-        return np.abs(spacing)
+        coord = np.asarray(coord,dtype=np.float64)
+        delta = np.empty_like(coord)
+        delta[1:-1]   = 0.5*(coord[2:]-coord[:-2])
+        delta[[0,-1]] = (coord[1]-coord[0],coord[-1]-coord[-2])
+        return np.abs(delta)
     dlat  = spacing(np.deg2rad(lats))
-    dlon  = spacing(np.deg2rad(lons))
-    dlev  = spacing(levs)
-    dtime = spacing(((times-times[0])/np.timedelta64(1,'s')))
-    area  = ((rearth**2)*np.cos(np.deg2rad(lats))*dlat).reshape(lats.size,1)*dlon.reshape(1,lons.size)
-    quad  = area.reshape(lats.size,lons.size,1,1)*dlev.reshape(1,1,levs.size,1)*dtime.reshape(1,1,1,times.size).astype(np.float32)
-    da = xr.DataArray(quad,dims=dims,coords=dict(lat=refda.lat,lon=refda.lon,lev=refda.lev,time=refda.time))
-    return da
+    dlon  = spacing(np.deg2rad(lons))  
+    dareavalues = ((rearth**2)*np.cos(np.deg2rad(lats))*dlat).reshape(lats.size,1)*dlon.reshape(1,lons.size) 
+    dlevvalues  = spacing(levs)
+    dtimescalar = float(np.nanmedian((np.diff(times)/np.timedelta64(1,'s')).astype(np.float64)))
+    dtimevalues = np.full(times.size,dtimescalar)
+    darea = xr.DataArray(dareavalues.astype(np.float32),dims=('lat','lon'),coords={'lat':refda.lat,'lon':refda.lon})
+    dlev  = xr.DataArray(dlevvalues.astype(np.float32),dims=('lev',),coords={'lev':refda.lev})
+    dtime = xr.DataArray(dtimevalues.astype(np.float32),dims=('time',),coords={'time':refda.time})
+    return darea,dlev,dtime
 
 def dataset(da,shortname,longname,units,author=AUTHOR,email=EMAIL):
     '''
@@ -286,7 +279,7 @@ if __name__=='__main__':
     thetae     = calc_thetae(p,t,q)
     thetaestar = calc_thetae(p,t)
     logger.info('Calculating quadrature weights...')
-    quad = calc_quadrature_weights(t)
+    darea,dlev,dtime = calc_quadrature_weights(t)
     logger.info('Creating datasets...')
     dslist = [        
         dataset(t,'t','Air temperature','K'),
@@ -298,7 +291,9 @@ if __name__=='__main__':
         dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
         dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
         dataset(pr,'pr','Precipitation rate','mm/hr'),
-        dataset(quad,'quad','Quadrature weights','m² Pa s')]
+        dataset(darea,'darea','Horizontal area weights','m²'),
+        dataset(dlev,'dlev','Vertical thickness weights','Pa'),
+        dataset(dtime,'dtime','Time step weights (constant cadence)','s')]
     logger.info('Saving datasets...')
     for ds in dslist:
         save(ds)

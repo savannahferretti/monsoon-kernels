@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import os
-import sys
 import json
 import glob
 import h5py
@@ -9,9 +8,7 @@ import logging
 import warnings
 import numpy as np
 import xarray as xr
-
-sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import Config
+from scripts.utils import Config
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -23,14 +20,6 @@ SAVEDIR    = config.splitsdir
 TRAINRANGE = config.trainrange
 VALIDRANGE = config.validrange
 TESTRANGE  = config.testrange
-
-# class DataSplitter:
-#     def __init__(self, config):
-#         self.config = config
-    
-#     def create_split(self, splitrange): ...
-#     def compute_statistics(self, train_ds): ...
-#     def save_split(self, ds, split_name): ...
 
 def split(splitrange,filedir=FILEDIR):
     '''
@@ -55,7 +44,7 @@ def split(splitrange,filedir=FILEDIR):
 def stats(trainds,savedir=SAVEDIR):
     '''
     Purpose: Compute training-set statistics for each variable and save them to JSON. Statistics are not calculated 
-    for land fraction, and precipitation is log1p-transformed before statistics are calculated.
+    for land fraction and quadrature weights, and precipitation is log1p-transformed before statistics are calculated.
     Args:
     - trainds (xr.Dataset): training Dataset
     - savedir (str): output directory (defaults to SAVEDIR)
@@ -64,7 +53,7 @@ def stats(trainds,savedir=SAVEDIR):
     '''
     stats = {}
     for varname,da in trainds.data_vars.items():
-        if varname=='lf':
+        if varname in ('lf','darea','dlev','dtime'):
             continue
         elif varname=='pr':
             arr = np.log1p(da.values)
@@ -82,7 +71,7 @@ def stats(trainds,savedir=SAVEDIR):
 
 def normalize(ds,stats):
     '''
-    Purpose: Normalize an xr.Dataset using training statistics (for all variables except land fraction). For 
+    Purpose: Normalize an xr.Dataset using training statistics (for all variables except land fraction and quadrature weights). For 
     precipitation, we use a log1p-transform before normalization. 
     Args:
     - ds (xr.Dataset): Dataset to normalize
@@ -92,7 +81,7 @@ def normalize(ds,stats):
     '''
     datavars = {}
     for varname,da in ds.data_vars.items():
-        if varname=='lf':
+        if varname in ('lf','darea','dlev','dtime'):
             datavars[varname] = da
             continue
         mean = stats[f'{varname}_mean']
@@ -140,7 +129,6 @@ def save(ds,splitname,timechunksize=2208,savedir=SAVEDIR):
             pass
         logger.info('      File write successful')
         return True
-
     except Exception:
         logger.exception('      Failed to save or verify')
         return False

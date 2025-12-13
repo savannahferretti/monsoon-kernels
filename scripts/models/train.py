@@ -1,19 +1,15 @@
 #!/usr/bin/env python
 
-import os
-import sys  
+import os 
 import time
 import torch
 import wandb
 import logging
 import argparse
 import numpy as np
-
-
-sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import Config
-from architectures import ModelFactory 
-from data.inputs import InputDataModule
+from scripts.utils import Config
+from scripts.data.inputs import InputDataModule
+from scripts.models.architectures import ModelFactory 
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -45,7 +41,10 @@ def setup(seed=SEED):
     '''
     torch.manual_seed(seed)
     np.random.seed(seed)
-    device='cuda' if torch.cuda.is_available() else 'cpu'
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     if device=='cuda':
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
@@ -61,7 +60,7 @@ def parse():
     parser = argparse.ArgumentParser(description='Train and validate NN models.')
     parser.add_argument('--models',type=str,default='all',help='Comma-separated list of model names to evaluate, or `all`.')
     args = parser.parse_args()
-    return None if args.models == 'all' else {m.strip() for m in args.models.split(',')}
+    return None if args.models=='all' else {name.strip() for name in args.models.split(',')}
 
 def initialize(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS):
     '''
@@ -148,36 +147,57 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
         model.train()
         totalloss = 0.0
         for batch in trainloader:
+            
             fieldpatch   = batch['fieldpatch'].to(device)
-            quadpatch    = batch['quadpatch'].to(device)
             localvalues  = batch['localvalues'].to(device) if uselocal else None
-            targetvalue = batch['targetvalue'].to(device)  # FIXED: was targetvalues (plural)
+            targetvalues = batch['targetvalues'].to(device)
+
+            if hasattr(model,'intkernel'):
+                quadpatch  = batch['quadpatch'].to(device)
+                dareapatch = batch['dareapatch'].to(device)
+                dlevpatch  = batch['dlevpatch'].to(device)
+                dtimepatch = batch['dtimepatch'].to(device)
+
             optimizer.zero_grad()
-            if hasattr(model,'kernellayer'):
-                outputvalues,_ = model(fieldpatch,quadpatch,localvalues)
+
+            if hasattr(model,'intkernel'):
+                outputvalues = model(fieldpatch,quadpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
             else:
                 outputvalues = model(fieldpatch,localvalues)
-            loss   = criterion(outputvalues,targetvalue)  # FIXED: was targetvalues
+
+            loss = criterion(outputvalues,targetvalues)
             loss.backward()
             optimizer.step()
             scheduler.step() 
-            totalloss += loss.item()*len(targetvalue)  # FIXED: was targetvalues
+            totalloss += loss.item()*len(targetvalues)
+
         trainloss = totalloss/len(trainloader.dataset)
+
         model.eval()
         totalloss = 0.0
         with torch.no_grad():
             for batch in validloader:
+
                 fieldpatch   = batch['fieldpatch'].to(device)
-                quadpatch    = batch['quadpatch'].to(device)
                 localvalues  = batch['localvalues'].to(device) if uselocal else None
-                targetvalue = batch['targetvalue'].to(device)  # FIXED: was targetvalues
-                if hasattr(model,'kernellayer'):
-                    outputvalues,_ = model(fieldpatch,quadpatch,localvalues)
+                targetvalues = batch['targetvalues'].to(device)
+
+                if hasattr(model,'intkernel'):
+                    quadpatch  = batch['quadpatch'].to(device)
+                    dareapatch = batch['dareapatch'].to(device)
+                    dlevpatch  = batch['dlevpatch'].to(device)
+                    dtimepatch = batch['dtimepatch'].to(device)
+
+                if hasattr(model,'intkernel'):
+                    outputvalues = model(fieldpatch,quadpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
                 else:
                     outputvalues = model(fieldpatch,localvalues)
-                loss   = criterion(outputvalues,targetvalue)  # FIXED: was targetvalues
-                totalloss += loss.item()*len(targetvalue)  # FIXED: was targetvalues
+
+                loss = criterion(outputvalues,targetvalues)
+                totalloss += loss.item()*len(targetvalues)
+
         validloss = totalloss/len(validloader.dataset)
+
         if validloss<bestloss:
             beststate = {key:value.detach().cpu().clone() for key,value in model.state_dict().items()}
             bestloss  = validloss
@@ -185,13 +205,16 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
             noimprove = 0
         else:
             noimprove += 1
+
         wandb.log({
             'Epoch':epoch,
             'Training loss':trainloss,
             'Validation loss':validloss,
             'Learning rate':optimizer.param_groups[0]['lr']})
+
         if noimprove>=patience:
             break
+
     duration = time.time()-starttime
     wandb.run.summary.update({
         'Best model at epoch':bestepoch,
@@ -203,7 +226,7 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
     wandb.finish()
     
 if __name__=='__main__':
-    logger.info('Parsing arguments...')
+    logger.info('Spinning up...')
     device = setup()
     models = parse()
     logger.info('Preparing data splits...')
@@ -215,21 +238,17 @@ if __name__=='__main__':
         kind = modelconfig['kind']
         if models is not None and name not in models:
             continue
-        logger.info(f'Running `{name}`...')
+        logger.info(f'Training `{name}`...')
         model = None
         patchconfig   = modelconfig['patch']
         uselocal      = modelconfig['uselocal']
         currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
         if currentconfig==cachedconfig:
-            logger.info('   Reusing cached datasets and loaders...')
             result = cachedresult
         else:
-            logger.info('   Building new datasets and loaders...')
             result = InputDataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)
             cachedconfig = currentconfig
             cachedresult = result
-        logger.info('   Initializing model...')
         model = initialize(name,modelconfig,result,device)
-        logger.info('   Starting training...')
         fit(name,model,kind,result,uselocal,device)
         del model

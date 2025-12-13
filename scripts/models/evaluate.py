@@ -1,36 +1,69 @@
 #!/usr/bin/env python
 
 import os
-import sys  
+import time
 import torch
 import logging
 import argparse
 import numpy as np
 import xarray as xr
-
-sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import Config
-from data.inputs import InputDataModule 
-from architectures import ModelFactory  
-from kernels import NonparametricKernelLayer,ParametricKernelLayer
+from scripts.utils import Config
+from scripts.data.inputs import InputDataModule
+from scripts.data.outputs import OutputDataModule
+from scripts.models.architectures import ModelFactory
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
 
 config = Config()
-SPLITDIR   = config.splitsdir  
-MODELDIR   = config.modelsdir  
+SPLITDIR   = config.splitsdir
 PREDSDIR   = config.predsdir
 FEATSDIR   = config.featsdir
 WEIGHTSDIR = config.weightsdir
+MODELDIR   = config.modelsdir
 FIELDVARS  = config.fieldvars
 LOCALVARS  = config.localvars
 TARGETVAR  = config.targetvar
 LATRANGE   = config.latrange
 LONRANGE   = config.lonrange
 SEED       = config.seed
-WORKERS    = config.workers
 BATCHSIZE  = config.batchsize
+WORKERS    = config.workers
+
+out = OutputDataModule(FIELDVARS)
+
+def setup(seed=SEED):
+    '''
+    Purpose: Set random seeds for reproducibility and configure the compute device.
+    Args:
+    - seed (int): random seed for NumPy and PyTorch
+    Returns:
+    - str: device to use
+    '''
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device=='cuda':
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.set_float32_matmul_precision('high')
+    return device
+
+def parse():
+    '''
+    Purpose: Parse command-line arguments for running the evaluation script.
+    Returns:
+    - tuple(set[str] | None,str): model names to run, or None if all models should be run, and split to use for inference
+    '''
+    parser = argparse.ArgumentParser(description='Evaluate NN models.')
+    parser.add_argument('--models',type=str,default='all',help='Comma-separated list of model names to evaluate, or `all`.')
+    parser.add_argument('--split',type=str,default='test',help='Split to evaluate: train|valid|test (default: test)')
+    args = parser.parse_args()
+    models = None if args.models=='all' else {name.strip() for name in args.models.split(',') if name.strip()}
+    return models,args.split
     
 def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,modeldir=MODELDIR):
     '''
@@ -63,218 +96,127 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
 
 def inference(model,split,result,uselocal,device):
     '''
-    Purpose: Run inference on the model.
+    Purpose: Run inference for predictions, and if present, also collect kernel-integrated features and normalized weights.
+    
+    Notes:
+    - Predictions are the forward pass outputs.
+    - Features are pulled from model.intkernel.features after each forward pass.
+    - Normalized weights are pulled from model.intkernel.weights (captured once after first forward pass).
+    
     Args:
     - model (torch.nn.Module): trained model instance 
-    - split (str): 'valid' | 'test'
+    - split (str): 'train' | 'valid' | 'test'
     - result (dict[str,object]): dictionary from InputDataModule.dataloaders()
     - uselocal (bool): whether to use local inputs
     - device (str): device to use
     Returns:
-    - xr.DataArray: predicted precipitation DataArray
+    - dict[str,object]: dictionary with NumPy arrays and kernel metadata
     '''
     dataloader = result['loaders'][split]
+    havekernel = hasattr(model,'intkernel')
+    nonparam   = bool(havekernel and ('nonparametric' in model.intkernel.__class__.__name__.lower()))
+    nkernels   = int(getattr(model,'nkernels',1)) if havekernel else 1
+    kerneldims = tuple(getattr(model,'kerneldims',())) if havekernel else tuple()
+
     model.eval()
-    outputslist  = []
-    featureslist = []
+    predslist  = []
+    featslist  = []
+    weights    = None
+
     with torch.no_grad():
         for batch in dataloader:
+
             fieldpatch  = batch['fieldpatch'].to(device)
-            quadpatch   = batch['quadpatch'].to(device)
-            localvalues = batch['localvalues'].to(device) if uselocal else None
-            if hasattr(model,'kernellayer'):
-                outputvalues,features = model(fieldpatch,quadpatch,localvalues)
-                featureslist.append(features.cpu().numpy())
+            localvalues = batch['localvalues'].to(device) if (uselocal and 'localvalues' in batch) else None
+
+            if havekernel:
+                quadpatch  = batch['quadpatch'].to(device)
+                dareapatch = batch['dareapatch'].to(device)
+                dlevpatch  = batch['dlevpatch'].to(device)
+                dtimepatch = batch['dtimepatch'].to(device)
+                outputvalues = model(fieldpatch,quadpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+
+                if model.intkernel.features is None:
+                    raise RuntimeError('`model.intkernel.features` was not populated during forward pass')
+                featslist.append(model.intkernel.features.detach().cpu().numpy())
+
+                if weights is None:
+                    if model.intkernel.weights is None:
+                        raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
+                    weights = model.intkernel.weights.detach().cpu().numpy()
             else:
                 outputvalues = model(fieldpatch,localvalues)
-            outputslist.append(outputvalues.cpu().numpy())
-    predictions = np.concatenate(outputslist,axis=0)
-    features    = np.concatenate(featureslist,axis=0) if featureslist else None
-    return predictions,features
 
-def reformat(data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,nonparam=False,fieldvars=FIELDVARS):
-    '''
-    Purpose: Reformat predictions, features, or weights into xr.Dataset objects with consistent dimensions.
-    Args:
-    - data (np.ndarray): predictions, kernel-integrated features, or kernel weights output by inference
-    - kind (str): 'predictions' | 'features' | 'weights'}
-    - centers (list[tuple[int,int,int]] | None): list of (latidx, lonidx, timeidx) patch centers
-    - refda (xr.DataArray | None): reference DataArray for reconstructing predictions and features or None
-    - nkernels (int | None): number of learned kernels or None
-    - kerneldims (list[str] | tuple[str] | None): dimensions along which the kernel varies for reconstructing weights or None
-    - nonparam (bool): whether the kernel is non-parametric
-    - fieldvars (list[str]): predictor variable names (defaults to FIELDVARS)
-    Returns:
-    - xr.Dataset: Dataset of predictions, features, or weights
-    '''
-    if kind=='predictions':
-        if refda is None or centers is None:
-            raise ValueError('`refda` and `centers` required for prediction reformatting')
-        nlats,nlons,ntimes = refda.shape 
-        if nonparam and data.ndim==2 and data.shape[1]==nkernels:
-            arr = np.full((nkernels,nlats,nlons,ntimes),np.nan,dtype=np.float32)
-            for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                arr[:,latidx,lonidx,timidx] = data[i]
-            da = xr.DataArray(arr,dims=('member',)+refda.dims,coords={'member':np.arange(nkernels),**refda.coords},name='pr')
-        else:
-            arr = np.full(refda.shape,np.nan,dtype=np.float32)
-            for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                arr[latidx,lonidx,timeidx] = data[i]
-            da = xr.DataArray(arr,dims=refda.dims,coords=refda.coords,name='pr')
-        da.attrs = dict(long_name='Predicted precipitation rate (log1p-transformed and standardized)',units='N/A')
-        return da.to_dataset()
-    elif kind=='features':
-        if refda is None or centers is None:
-            raise ValueError('`refda` and `centers` required for feature reformatting')
-        if data.shape[1]!=len(fieldvars)*nkernels:
-            raise ValueError('`data.shape[1]` must equal len(fieldvars) × nkernels')
-        nsamples,nfeatures = data.shape
-        nlats,nlons,ntimes = refda.shape
-        data = data.reshape(nsamples,len(fieldvars),nkernels)
-        ds   = xr.Dataset()
-        if nonparam:
-            arr = np.full((nkernels,len(fieldvars),nlats,nlons,ntimes),np.nan,dtype=np.float32)
-            for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                arr[:,:,latidx,lonidx,timidx] = data[i].transpose(1,0)
-            for fieldidx,varname in enumerate(fieldvars):
-                da = xr.DataArray(arr[:,fieldidx,...],dims=('member',)+refda.dims,coords={'member':np.arange(nkernels),**refda.coords},name=varname)
-                da.attrs = dict(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
-                ds[da.name] = da
-        else:
-            data = data[...,0]
-            arr  = np.full((len(fieldvars),nlats,nlons,ntimes),np.nan,dtype=np.float32)
-            for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                arr[:,latidx,lonidx,timidx] = data[i]
-            for fieldidx,varname in enumerate(fieldvars):
-                da = xr.DataArray(arr[fieldidx,...],refda.dims,coords=refda.coords,name=varname)
-                da.attrs = dict(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
-                ds[da.name] = da
-        return ds    
-    elif kind=='weights':
-        if kerneldims is None:
-            raise ValueError('`kerneldims` required for weight reformatting')
-        kerneldims = tuple(kerneldims)
-        alldims    = ['field','member','lat','lon','lev','time']
-        if nonparam:
-            indexer = [slice(None) if dim in ('field','member') or dim in kerneldims else 0 for dim in alldims]
-            weights = data[tuple(indexer)]
-            dims    = ['field','member']+[dim for dim in ('lat','lon','lev','time') if dim in kerneldims]
-            coords  = {'field':fieldvars,'member':np.arange(data.shape[1])}
-            for ax,dim in enumerate(dims[2:],start=2):
-                coords[dim] = np.arange(weights.shape[ax])
-            da = xr.DataArray(weights,dims=dims,coords=coords,name='weights')
-            da.attrs = dict(long_name='Nonparametric kernel weights',units='N/A')
-            return da.to_dataset()
-        else:
-            nfieldvars,nkernels,plats,plons,plevs,ptimes = data.shape
-            indexer = [slice(None) if dim=='field' or dim in kerneldims else 0 for dim in alldims]
-            weights = data[tuple(indexer)]
-            dims    = ['field']+[dim for dim in ('lat','lon','lev','time') if dim in kerneldims]
-            coords  = {'field':fieldvars}
-            for ax,dim in enumerate(dims[1:],start=1):
-                coords[dim] = np.arange(weights.shape[ax])
-            da = xr.DataArray(weights,dims=dims,coords=coords,name='weights')
-            da.attrs = dict(long_name=f'Parametric kernel weights',units='N/A')
-            return da.to_dataset()
+            predslist.append(outputvalues.detach().cpu().numpy())
 
-def save(name,ds,kind,split,savedir):
-    '''
-    Purpose: Save an xr.Dataset of prediction, features, or weights to NetCDF and verify by reopening.
-    Args:
-    - name (str): model name
-    - ds (xr.Dataset): Dataset containing predictions, kernel-integrated features, or kernel weights
-    - kind (str): 'predictions' | 'features' | 'weights'
-    - split (str): 'valid' | 'test'
-    - resultsdir (str): output directory
-    Returns:
-    - bool: True if save and verification successful, False otherwise
-    '''
-    os.makedirs(savedir,exist_ok=True)
-    filename = f'{name}_{split}_{kind}.nc'
-    filepath = os.path.join(savedir,filename)
-    logger.info(f'   Attempting to save {filename}...')
-    try:
-        ds.to_netcdf(filepath,engine='h5netcdf')
-        with xr.open_dataset(filepath,engine='h5netcdf') as _:
-            pass
-        logger.info('      File write successful')
-        return True
-    except Exception:
-        logger.exception('      Failed to save or verify')
-        return False
-        
-def parse():
-    '''
-    Purpose: Parse command-line arguments for running the evaluation script.
-    Returns:
-    - argparse.Namespace: parsed arguments
-    '''
-    parser = argparse.ArgumentParser(description='Evaluate NN precipitation models.')
-    parser.add_argument('--models',type=str,default='all',help='Comma-separated list of model names to evaluate, or `all`.')
-    parser.add_argument('--split',type=str,required=True,choices=['valid','test'],help='Which split to evaluate (`valid` or `test`).')
-    return parser.parse_args()
-    
+    preds = np.concatenate(predslist,axis=0).astype(np.float32)
+    feats = np.concatenate(featslist,axis=0).astype(np.float32) if (havekernel and len(featslist)>0) else None
+    weights = weights.astype(np.float32) if weights is not None else None
+
+    return {
+        'predictions':preds,
+        'features':feats,
+        'weights':weights,
+        'havekernel':havekernel,
+        'nonparam':nonparam,
+        'nkernels':nkernels,
+        'kerneldims':kerneldims}
+
 if __name__=='__main__':
-    logger.info('Setting random seed...')
-    torch.manual_seed(SEED)
-    np.random.seed(SEED)
-    logger.info('Determining device type...')
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    if device=='cuda':
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-        torch.set_float32_matmul_precision('high')
-    logger.info('Parsing arguments...')
-    args   = parse()
-    models = [m.strip() for m in args.models.split(',')] if args.models!='all' else None
-    split  = args.split
+    logger.info('Spinning up...')
+    device       = setup()
+    models,split = parse()
+
     logger.info('Preparing evaluation split...')
-    splitdata = InputDataModule.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)  # FIXED: was DataModule
+    splitdata = InputDataModule.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
+
     cachedconfig = None
     cachedresult = None
+
     for modelconfig in config.models:
         name = modelconfig['name']
+        kind = modelconfig['kind']
         if models is not None and name not in models:
             continue
-        logger.info(f'Running {name}...')
+
+        logger.info(f'Evaluating `{name}`...')
+
         patchconfig   = modelconfig['patch']
         uselocal      = modelconfig['uselocal']
         currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
+
         if currentconfig==cachedconfig:
-            logger.info('   Reusing cached datasets and loaders...')
             result = cachedresult
         else:
-            logger.info('   Building new datasets and loaders....')
             result = InputDataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device) 
             cachedconfig = currentconfig
             cachedresult = result
-        logger.info('   Initializing model and populating trained weights....')
+
         model = load(name,modelconfig,result,device)
-        logger.info('   Starting inference....')
-        predictions,features = inference(model,split,result,uselocal,device)
-        logger.info('Saving outputs...')
-        centers   = result['centers'][split]
-        refda     = splitdata[split]['refda']
-        haskernel = hasattr(model,'kernellayer')
-        nonparam  = haskernel and isinstance(model.kernellayer,NonparametricKernelLayer)
-        nkernels  = model.kernellayer.nkernels if haskernel else 1
-        ds = reformat(predictions,kind='predictions',centers=centers,refda=refda,nkernels=nkernels,nonparam=nonparam)
-        save(name,ds,'predictions',split,PREDSDIR)
-        if haskernel:
-            # Extract representative quad patch from full grid
-            quad_full = splitdata[split]['quad']
-            patchshape = result['geometry'].shape()
-            plats, plons, plevs, ptimes = patchshape
-            nlats, nlons, nlevs, ntimes = quad_full.shape
-            lat_center, lon_center = nlats // 2, nlons // 2
-            quadpatch = quad_full[lat_center:lat_center+plats, lon_center:lon_center+plons, :plevs, :ptimes]
-            if not isinstance(quadpatch, torch.Tensor):
-                quadpatch = torch.from_numpy(quadpatch)
-            with torch.no_grad():
-                weights = model.kernellayer.weights(quadpatch, device, asarray=True)
-            ds = reformat(weights,kind='weights',nkernels=nkernels,kerneldims=model.kernellayer.kerneldims,nonparam=nonparam)
-            save(name,ds,'weights',split,WEIGHTSDIR)
-            if features is not None:
-                ds = reformat(features,'features',centers=centers,refda=refda,nkernels=nkernels,nonparam=nonparam)
-                save(name,ds,'features',split,FEATSDIR)
-        del model,predictions,features,centers,refda,haskernel,nonparam,nkernels,ds
+        if model is None:
+            continue
+
+        info    = inference(model,split,result,uselocal,device)
+        centers = result['centers'][split]
+        refda   = splitdata[split]['refda']
+
+        logger.info('   Formatting/saving predictions...')
+        arr,meta = out.to_array(info['predictions'],'predictions',
+                               centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
+        ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
+        out.save(name,ds,'predictions',split,PREDSDIR)
+
+        if info['havekernel']:
+            logger.info('   Formatting/saving kernel-integrated features...')
+            arr,meta = out.to_array(info['features'],'features',
+                                   centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
+            ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
+            out.save(name,ds,'features',split,FEATSDIR)
+
+            logger.info('   Formatting/saving normalized kernel weights...')
+            arr,meta = out.to_array(info['weights'],'weights',
+                                   kerneldims=info['kerneldims'],nonparam=info['nonparam'])
+            ds = out.to_dataset(arr,meta)
+            out.save(name,ds,'weights',split,WEIGHTSDIR)
+
+        del model

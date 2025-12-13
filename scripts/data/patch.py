@@ -57,15 +57,23 @@ class PatchGeometry:
 
 class PatchDataset(torch.utils.data.Dataset):
     
-    def __init__(self,geometry,centers,field,quad,local,target,uselocal):
+    def __init__(self,geometry,centers,field,darea,dlev,dtime,local,target,uselocal):
         '''
-        Purpose: Return patches of the predictors fields and quadrature weights, as well as local (optional) and target 
-        values for each patch center.
+        Purpose: Return patches of the predictors fields and quadrature weights (separable components + product measure), 
+        as well as local (optional) and target values for each patch center.
+        
+        Notes:
+        - The separable components (ΔA, Δp, Δt) are carried explicitly so kernel normalization can use only the factors
+          along the kernel’s active dimensions.
+        - The product measure (quadpatch = ΔA*Δp*Δt) is provided for the feature integral itself.
+        
         Args:
         - geometry (PatchGeometry): patch geometry
         - centers (list[tuple[int,int,int]]): list of (latidx, lonidx, timeidx) patch centers
         - field (torch.Tensor): predictor fields with shape (nfieldvars, nlats, nlons, nlevs, ntimes)
-        - quad (torch.Tensor): quadrature weights with shape (nlats, nlons, nlevs, ntimes)
+        - darea (torch.Tensor): horizontal area weights with shape (nlats, nlons)
+        - dlev (torch.Tensor): vertical thickness weights with shape (nlevs,)
+        - dtime (torch.Tensor): time step weights with shape (ntimes,)
         - local (torch.Tensor | None): local inputs with shape (nlocalvars, nlats, nlons, ntimes) if uselocal is True, otherwise None
         - target (torch.Tensor): target values with shape (nlats, nlons, ntimes)
         - uselocal (bool): whether to use local inputs
@@ -73,8 +81,12 @@ class PatchDataset(torch.utils.data.Dataset):
         super().__init__()
         if field.ndim!=5:
             raise ValueError('`field` must have shape (nfieldvars, nlats, nlons, nlevs, ntimes)')
-        if quad.ndim!=4:
-            raise ValueError('`quad` must have shape (nlats, nlons, nlevs, ntimes)')
+        if darea.ndim!=2:
+            raise ValueError('`darea` must have shape (nlats, nlons)')
+        if dlev.ndim!=1:
+            raise ValueError('`dlev` must have shape (nlevs,)')
+        if dtime.ndim!=1:
+            raise ValueError('`dtime` must have shape (ntimes,)')
         if local is not None and local.ndim!=4:
             raise ValueError('`local` must have shape (nlocalvars, nlats, nlons, ntimes) or be None')
         if target.ndim!=3:
@@ -82,7 +94,9 @@ class PatchDataset(torch.utils.data.Dataset):
         self.geometry = geometry
         self.centers  = list(centers)
         self.field    = field
-        self.quad     = quad
+        self.darea    = darea
+        self.dlev     = dlev
+        self.dtime    = dtime
         self.local    = local
         self.target   = target
         self.uselocal = bool(uselocal)
@@ -95,20 +109,45 @@ class PatchDataset(torch.utils.data.Dataset):
         '''
         return len(self.centers)
 
+    @staticmethod
+    def _pad_left_1d(vec,padlength):
+        '''
+        Purpose: Left-pad a 1D tensor with zeros (used for time-lag boundary samples).
+        Args:
+        - vec (torch.Tensor): 1D tensor of shape (n,)
+        - padlength (int): number of zeros to prepend
+        Returns:
+        - torch.Tensor: padded 1D tensor of shape (n+padlength,)
+        '''
+        if padlength<=0:
+            return vec
+        pad = torch.zeros((padlength,),dtype=vec.dtype,device=vec.device)
+        return torch.cat([pad,vec],dim=0)
+
     def __getitem__(self,idx):
         '''
         Purpose: Extract a single sample containing patches for the predictor fields and quadrature weights, as well as 
         local (optional) and target values.
+        
+        Returns a dictionary with:
+        - fieldpatch: predictor fields patch (nfieldvars, plats, plons, plevs, ptimes)
+        - quadpatch:  product measure patch (plats, plons, plevs, ptimes) = ΔA*Δp*Δt
+        - dareapatch: horizontal area patch (plats, plons)
+        - dlevpatch:  vertical thickness patch (plevs,)
+        - dtimepatch: time step patch (ptimes,)
+        - targetvalues: scalar target value at the patch center
+        - localvalues (optional): local inputs at the patch center
+        
         Args:
         - idx (int): index into valid centers list
         Returns:
-        - dict[str,torch.Tensor]: dictionary containing, for a given sample, PyTorch tensors for the "patch" of field data,
-          the "patch" of quadrature weights, optional local values, and the target value
+        - dict[str,torch.Tensor]: sample dictionary
         '''
         latidx,lonidx,timeidx = self.centers[idx]
         latmin,latmax = latidx-self.geometry.radius,latidx+self.geometry.radius+1
         lonmin,lonmax = lonidx-self.geometry.radius,lonidx+self.geometry.radius+1
         levmin,levmax = 0,self.geometry.maxlevs
+
         if self.geometry.timelag>0:
             timemin,timemax = max(0,timeidx-self.geometry.timelag),timeidx+1
             patchtimelength = timemax-timemin
@@ -116,18 +155,28 @@ class PatchDataset(torch.utils.data.Dataset):
         else:
             timemin,timemax = timeidx,timeidx+1
             patchtimelength = neededlength = 1
+
         fieldpatch = self.field[:,latmin:latmax,lonmin:lonmax,levmin:levmax,timemin:timemax]
-        quadpatch  = self.quad[latmin:latmax,lonmin:lonmax,levmin:levmax,timemin:timemax]
+
+        dareapatch = self.darea[latmin:latmax,lonmin:lonmax]
+        dlevpatch  = self.dlev[levmin:levmax]
+        dtimepatch = self.dtime[timemin:timemax]
+
         if patchtimelength<neededlength:
             padlength  = neededlength-patchtimelength
             fieldpad   = torch.zeros((*fieldpatch.shape[:-1],padlength),dtype=fieldpatch.dtype,device=fieldpatch.device)
-            quadpad    = torch.zeros((*quadpatch.shape[:-1],padlength),dtype=quadpatch.dtype,device=quadpatch.device)
             fieldpatch = torch.cat([fieldpad,fieldpatch],dim=-1)
-            quadpatch  = torch.cat([quadpad,quadpatch],dim=-1)
+            dtimepatch = self._pad_left_1d(dtimepatch,padlength)
+
+        quadpatch = (dareapatch[:,:,None,None]*dlevpatch[None,None,:,None]*dtimepatch[None,None,None,:])
+
         sample = {
             'fieldpatch':fieldpatch,
             'quadpatch':quadpatch,
-            'targetvalue':self.target[latidx,lonidx,timeidx]}
+            'dareapatch':dareapatch,
+            'dlevpatch':dlevpatch,
+            'dtimepatch':dtimepatch,
+            'targetvalues':self.target[latidx,lonidx,timeidx]}
         if self.uselocal and self.local is not None:
             sample['localvalues'] = self.local[:,latidx,lonidx,timeidx]
         return sample

@@ -11,9 +11,7 @@ import xarray as xr
 import planetary_computer
 from datetime import datetime
 import pystac_client as pystac
-
-sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import Config
+from scripts.utils import Config
 
 logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.WARNING)
 logging.getLogger('azure').setLevel(logging.WARNING)
@@ -31,14 +29,6 @@ LONRANGE = config.lonrange
 LEVRANGE = config.levrange
 YEARS    = config.years
 MONTHS   = config.months
-
-# class DataDownloader:
-#     def __init__(self, config):
-#         self.config = config
-    
-#     def download_era5(self): ...
-#     def download_imerg(self): ...
-#     def download_all(self): ...
 
 def retrieve_era5():
     '''
