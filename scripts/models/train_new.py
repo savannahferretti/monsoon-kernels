@@ -10,6 +10,8 @@ import numpy as np
 from scripts.utils import Config
 from scripts.data.inputs import InputDataModule
 from scripts.models.architectures import ModelFactory 
+# ADDED: Import automatic mixed precision modules
+from torch.cuda.amp import autocast, GradScaler
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -94,7 +96,7 @@ def save(name,state,kind,modeldir=MODELDIR):
     '''
     savedir = os.path.join(modeldir,kind)
     os.makedirs(savedir,exist_ok=True)
-    filename = f'{name}.pth'
+    filename = f'new_{name}.pth'
     filepath = os.path.join(savedir,filename)
     logger.info(f'      Attempting to save {filename}...')
     try:
@@ -126,8 +128,14 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
     trainloader = result['loaders']['train']
     validloader = result['loaders']['valid']
     optimizer = torch.optim.Adam(model.parameters(),lr=lr)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,max_lr=lr,epochs=epochs,steps_per_epoch=len(trainloader),pct_start=0.1,anneal_strategy='cos')
+    # scheduler = torch.optim.lr_scheduler.OneCycleLR(
+    #     optimizer,max_lr=lr,epochs=epochs,steps_per_epoch=len(trainloader),pct_start=0.1,anneal_strategy='cos')
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=2, min_lr=1e-6)
+    
+    # ADDED: Initialize gradient scaler for mixed precision (only for CUDA)
+    scaler = GradScaler() if device=='cuda' else None
+    
     wandb.init(project=project,name=name,
                config={
                    'Epochs':epochs,
@@ -136,7 +144,8 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
                    'Early stopping patience':patience,
                    'Loss function':criterion,
                    'Number of parameters':model.nparams,
-                   'Device':device})
+                   'Device':device,
+                   'Mixed precision':device=='cuda'})  # ADDED: Log whether using mixed precision
     criterion = getattr(torch.nn,criterion)()
     beststate = None
     bestloss  = float('inf')
@@ -147,42 +156,80 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
         model.train()
         totalloss = 0.0
         for batch in trainloader:
+            
             fieldpatch   = batch['fieldpatch'].to(device)
             localvalues  = batch['localvalues'].to(device) if uselocal else None
             targetvalues = batch['targetvalues'].to(device)
+
             if hasattr(model,'intkernel'):
                 dareapatch = batch['dareapatch'].to(device)
                 dlevpatch  = batch['dlevpatch'].to(device)
                 dtimepatch = batch['dtimepatch'].to(device)
+
             optimizer.zero_grad()
-            if hasattr(model,'intkernel'):
-                outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+
+            # UPDATED: Wrap forward pass in autocast for mixed precision
+            if device=='cuda':
+                with autocast():
+                    if hasattr(model,'intkernel'):
+                        outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                    else:
+                        outputvalues = model(fieldpatch,localvalues)
+                    loss = criterion(outputvalues,targetvalues)
+                
+                # UPDATED: Use gradient scaler for backward pass and optimizer step
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
             else:
-                outputvalues = model(fieldpatch,localvalues)
-            loss = criterion(outputvalues,targetvalues)
-            loss.backward()
-            optimizer.step()
-            scheduler.step() 
-            totalloss += loss.item()*len(targetvalues)
-        trainloss = totalloss/len(trainloader.dataset)
-        model.eval()
-        totalloss = 0.0
-        with torch.no_grad():
-            for batch in validloader:
-                fieldpatch   = batch['fieldpatch'].to(device)
-                localvalues  = batch['localvalues'].to(device) if uselocal else None
-                targetvalues = batch['targetvalues'].to(device)
-                if hasattr(model,'intkernel'):
-                    dareapatch = batch['dareapatch'].to(device)
-                    dlevpatch  = batch['dlevpatch'].to(device)
-                    dtimepatch = batch['dtimepatch'].to(device)
+                # CPU path: no mixed precision
                 if hasattr(model,'intkernel'):
                     outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
                 else:
                     outputvalues = model(fieldpatch,localvalues)
                 loss = criterion(outputvalues,targetvalues)
+                loss.backward()
+                optimizer.step()
+            
+            # scheduler.step() 
+            totalloss += loss.item()*len(targetvalues)
+
+        trainloss = totalloss/len(trainloader.dataset)
+
+        model.eval()
+        totalloss = 0.0
+        with torch.no_grad():
+            for batch in validloader:
+
+                fieldpatch   = batch['fieldpatch'].to(device)
+                localvalues  = batch['localvalues'].to(device) if uselocal else None
+                targetvalues = batch['targetvalues'].to(device)
+
+                if hasattr(model,'intkernel'):
+                    dareapatch = batch['dareapatch'].to(device)
+                    dlevpatch  = batch['dlevpatch'].to(device)
+                    dtimepatch = batch['dtimepatch'].to(device)
+
+                # UPDATED: Use autocast for validation as well (faster, no gradient scaler needed)
+                if device=='cuda':
+                    with autocast():
+                        if hasattr(model,'intkernel'):
+                            outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                        else:
+                            outputvalues = model(fieldpatch,localvalues)
+                        loss = criterion(outputvalues,targetvalues)
+                else:
+                    # CPU path: no mixed precision
+                    if hasattr(model,'intkernel'):
+                        outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                    else:
+                        outputvalues = model(fieldpatch,localvalues)
+                    loss = criterion(outputvalues,targetvalues)
+
                 totalloss += loss.item()*len(targetvalues)
+
         validloss = totalloss/len(validloader.dataset)
+        scheduler.step(validloss) ########
         if validloss<bestloss:
             beststate = {key:value.detach().cpu().clone() for key,value in model.state_dict().items()}
             bestloss  = validloss
@@ -190,13 +237,16 @@ def fit(name,model,kind,result,uselocal,device,project=PROJECT,lr=LR,patience=PA
             noimprove = 0
         else:
             noimprove += 1
+
         wandb.log({
             'Epoch':epoch,
             'Training loss':trainloss,
             'Validation loss':validloss,
             'Learning rate':optimizer.param_groups[0]['lr']})
+
         if noimprove>=patience:
             break
+
     duration = time.time()-starttime
     wandb.run.summary.update({
         'Best model at epoch':bestepoch,
