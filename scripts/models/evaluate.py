@@ -245,7 +245,7 @@ if __name__=='__main__':
             result = cachedresult
         else:
             logger.info('   Building new datasets and loaders....')
-            result = InputDataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device)  # FIXED: was DataModule
+            result = InputDataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device) 
             cachedconfig = currentconfig
             cachedresult = result
         logger.info('   Initializing model and populating trained weights....')
@@ -254,14 +254,24 @@ if __name__=='__main__':
         predictions,features = inference(model,split,result,uselocal,device)
         logger.info('Saving outputs...')
         centers   = result['centers'][split]
-        refda     = splitdata[split]['refda']  # FIXED: was splitdata[split]['ds'][TARGETVAR]
+        refda     = splitdata[split]['refda']
         haskernel = hasattr(model,'kernellayer')
         nonparam  = haskernel and isinstance(model.kernellayer,NonparametricKernelLayer)
         nkernels  = model.kernellayer.nkernels if haskernel else 1
         ds = reformat(predictions,kind='predictions',centers=centers,refda=refda,nkernels=nkernels,nonparam=nonparam)
         save(name,ds,'predictions',split,PREDSDIR)
         if haskernel:
-            weights = model.kernellayer.weights(result['geometry'].quad,device,asarray=True)  # FIXED: was result['quad']
+            # Extract representative quad patch from full grid
+            quad_full = splitdata[split]['quad']
+            patchshape = result['geometry'].shape()
+            plats, plons, plevs, ptimes = patchshape
+            nlats, nlons, nlevs, ntimes = quad_full.shape
+            lat_center, lon_center = nlats // 2, nlons // 2
+            quadpatch = quad_full[lat_center:lat_center+plats, lon_center:lon_center+plons, :plevs, :ptimes]
+            if not isinstance(quadpatch, torch.Tensor):
+                quadpatch = torch.from_numpy(quadpatch)
+            with torch.no_grad():
+                weights = model.kernellayer.weights(quadpatch, device, asarray=True)
             ds = reformat(weights,kind='weights',nkernels=nkernels,kerneldims=model.kernellayer.kerneldims,nonparam=nonparam)
             save(name,ds,'weights',split,WEIGHTSDIR)
             if features is not None:

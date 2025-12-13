@@ -19,7 +19,6 @@ class NonparametricKernelLayer(torch.nn.Module):
         self.kerneldims = tuple(kerneldims)
         self.kernel     = None
 
-    @torch.no_grad()
     def weights(self,quadpatch,device,asarray=False):
         '''
         Purpose: Obtain normalized non-parametric kernel weights over a patch.
@@ -134,7 +133,6 @@ class ParametricKernelLayer(torch.nn.Module):
             else:
                 raise ValueError(f'Unknown function type `{function}`; must be either `gaussian` or `exponential`')
 
-    @torch.no_grad()
     def weights(self,quadpatch,device,asarray=False):
         '''
         Purpose: Obtain normalized parametric kernel weights over a patch.

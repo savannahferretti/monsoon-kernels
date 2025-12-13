@@ -4,7 +4,7 @@ import os
 import torch 
 import numpy as np 
 import xarray as xr  
-from patch import PatchGeometry,PatchDataset 
+from .patch import PatchGeometry,PatchDataset 
 
 class InputDataModule:
 
@@ -27,8 +27,9 @@ class InputDataModule:
             filepath = os.path.join(filedir,filename)
             ds = xr.open_dataset(filepath,engine='h5netcdf')
             field  = torch.from_numpy(np.stack([ds[varname].values for varname in fieldvars],axis=0))
-            local  = (torch.from_numpy(np.stack([ds[varname].values if 'time' in ds[varname].dims else ds[varname].expand_dims(time=ds.time).values
-                                                 for varname in localvars],axis=0))) if localvars else None
+            local  = (torch.from_numpy(np.stack([ds[varname].values if 'time' in ds[varname].dims else 
+                                                 np.broadcast_to(ds[varname].values[...,np.newaxis],(*ds[varname].shape,len(ds.time)))
+                for varname in localvars],axis=0))) if localvars else None
             target = torch.from_numpy(ds[targetvar].values)
             quad   = torch.from_numpy(ds['quad'].values)
             result[split] = { 

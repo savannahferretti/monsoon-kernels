@@ -1,13 +1,16 @@
 #!/usr/bin/env python 
 
+import os
 import json 
 
 class Config: 
 
-    def __init__(self,path='configs.json'): 
+    def __init__(self,path=None): 
         '''
         Purpose: Load configurations from a JSON file and expose commonly used blocks/paths as attributes.
         '''
+        if path is None:
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'configs.json')
         with open(path,'r',encoding='utf-8') as f: 
             config = json.load(f) 
             self.filepaths = config['filepaths'] 
