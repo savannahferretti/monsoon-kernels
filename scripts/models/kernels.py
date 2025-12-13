@@ -261,5 +261,5 @@ class ParametricKernelLayer(torch.nn.Module):
         dlevmean  = dlevpatch.mean(dim=0)
         dtimemean = dtimepatch.mean(dim=0)
         weights   = self.get_weights(dareamean,dlevmean,dtimemean,fieldpatch.device)
-        self.features = KernelModule.integrate(fieldpatch,weights,quadpatch)
+        self.features = KernelModule.integrate(fieldpatch,weights)
         return self.features
