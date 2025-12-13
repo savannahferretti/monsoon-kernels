@@ -51,19 +51,20 @@ class KernelModule:
     def integrate(fieldpatch,weights,quadpatch):
         '''
         Purpose: Integrate the predictor fields using the normalized kernel weights.
-        
+
         Notes:
-        - The feature integral uses the full product measure quadpatch = ΔA*Δp*Δt, regardless of which dimensions
-          the kernel varies along.
-        
+        - The weights are already normalized to integrate to 1 with quadrature factors included in the
+          normalization step, so the feature integral is a simple weighted sum without applying quadpatch again.
+        - The quadpatch parameter is kept for API compatibility but is not used in the computation.
+
         Args:
         - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - weights (torch.Tensor): normalized kernel weights with shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
-        - quadpatch (torch.Tensor): product measure patch with shape (nbatch, plats, plons, plevs, ptimes)
+        - quadpatch (torch.Tensor): product measure patch with shape (nbatch, plats, plons, plevs, ptimes) [NOT USED]
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels)
         '''
-        features = torch.einsum('bfyxpt,fkyxpt,byxpt->bfk',fieldpatch,weights,quadpatch)
+        features = torch.einsum('bfyxpt,fkyxpt->bfk',fieldpatch,weights)
         return features.flatten(1)
 
 class NonparametricKernelLayer(torch.nn.Module):
