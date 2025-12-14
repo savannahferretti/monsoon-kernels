@@ -65,29 +65,30 @@ class InputDataModule:
     def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device):
         '''
         Purpose: Build PatchGeometry, centers, PatchDatasets, and DataLoaders for given splits.
-        
+
         Notes:
         - PatchDataset constructs and returns:
-          - quadpatch  = darea*dlev*dtime over each sample’s patch
+          - quadpatch  = darea*dlev*dtime over each sample's patch
           - dareapatch, dlevpatch, dtimepatch (separable components for kernel normalization)
-        
+        - Optimizations: pin_memory, persistent_workers, and prefetch_factor for GPU efficiency
+
         Args:
         - splitdata (dict): dictionary from prepare()
         - patchconfig (dict): patch configuration
         - uselocal (bool): whether to use local inputs
-        - latrange (tuple[float,float]): latitude range 
-        - lonrange (tuple[float,float]): longitude range 
+        - latrange (tuple[float,float]): latitude range
+        - lonrange (tuple[float,float]): longitude range
         - batchsize (int): batch size for PyTorch DataLoader
         - workers (int): number of PyTorch DataLoader workers
         - device (str): device to use
         Returns:
-        - dict[str,object]: dictionary containing the patch geometry, valid patch centers, constructed datasets, 
+        - dict[str,object]: dictionary containing the patch geometry, valid patch centers, constructed datasets,
           and dataloaders
         '''
         geometry = PatchGeometry(patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'])
         kwargs   = dict(num_workers=workers,pin_memory=(device=='cuda'),persistent_workers=(workers>0))
         if workers>0:
-            kwargs['prefetch_factor'] = 2
+            kwargs['prefetch_factor'] = 4
         centers  = {}
         datasets = {}
         loaders  = {}
