@@ -1,0 +1,11 @@
+Training model: nonparametric_vertical
+23:34:29 - INFO - Spinning up...
+23:34:30 - INFO - Preparing data splits...
+23:37:00 - INFO - Training `nonparametric_vertical`...
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20251213_233719-z08u7edy
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run nonparametric_vertical
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/Model%20Experiments/runs/z08u7edy

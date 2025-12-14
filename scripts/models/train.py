@@ -82,7 +82,8 @@ if __name__=='__main__':
         if currentconfig==cachedconfig:
             result = cachedresult
         else:
-            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device)
+            result = PatchDataLoader.dataloaders(
+                splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device)
             cachedconfig = currentconfig
             cachedresult = result
         model = initialize(name,modelconfig,result,device,config.fieldvars,config.localvars)

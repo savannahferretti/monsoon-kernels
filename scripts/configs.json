@@ -33,9 +33,9 @@
     "projectname":"Model Experiments",
     "seed":42,
     "workers":8,
-    "epochs":10,
-    "batchsize":5000,
-    "learningrate":0.001,
+    "epochs":20,
+    "batchsize":500,
+    "learningrate":0.0005,
     "patience":4,
     "criterion":"MSELoss"
   },

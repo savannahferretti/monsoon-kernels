@@ -89,6 +89,14 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     nfieldvars = len(fieldvars)
     nlocalvars = len(localvars)
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
+    if hasattr(model, "intkernel") and hasattr(model.intkernel, "kernel") and (model.intkernel.kernel is None):
+        batch = next(iter(result["loaders"]["valid"]))  # or "test"
+        with torch.no_grad():
+            fieldpatch = batch["fieldpatch"].to(device, non_blocking=True)
+            dareapatch = batch["dareapatch"].to(device, non_blocking=True)
+            dlevpatch  = batch["dlevpatch"].to(device, non_blocking=True)
+            dtimepatch = batch["dtimepatch"].to(device, non_blocking=True)
+            _ = model.intkernel(fieldpatch, dareapatch, dlevpatch, dtimepatch)
     state = torch.load(filepath,map_location='cpu')
     model.load_state_dict(state)
     return model.to(device)
@@ -119,26 +127,21 @@ def inference(model,split,result,uselocal,device):
 
     model.eval()
     predslist  = []
-    featslist  = []
+    # featslist  = []
     weights    = None
 
     with torch.no_grad():
         for batch in dataloader:
-
             fieldpatch  = batch['fieldpatch'].to(device)
             localvalues = batch['localvalues'].to(device) if (uselocal and 'localvalues' in batch) else None
-
             if havekernel:
-                quadpatch  = batch['quadpatch'].to(device)
                 dareapatch = batch['dareapatch'].to(device)
                 dlevpatch  = batch['dlevpatch'].to(device)
                 dtimepatch = batch['dtimepatch'].to(device)
-                outputvalues = model(fieldpatch,quadpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
-
-                if model.intkernel.features is None:
-                    raise RuntimeError('`model.intkernel.features` was not populated during forward pass')
-                featslist.append(model.intkernel.features.detach().cpu().numpy())
-
+                outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                # if model.intkernel.features is None:
+                #     raise RuntimeError('`model.intkernel.features` was not populated during forward pass')
+                # featslist.append(model.intkernel.features.detach().cpu().numpy())
                 if weights is None:
                     if model.intkernel.weights is None:
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
@@ -149,12 +152,12 @@ def inference(model,split,result,uselocal,device):
             predslist.append(outputvalues.detach().cpu().numpy())
 
     preds = np.concatenate(predslist,axis=0).astype(np.float32)
-    feats = np.concatenate(featslist,axis=0).astype(np.float32) if (havekernel and len(featslist)>0) else None
+    # feats = np.concatenate(featslist,axis=0).astype(np.float32) if (havekernel and len(featslist)>0) else None
     weights = weights.astype(np.float32) if weights is not None else None
 
     return {
         'predictions':preds,
-        'features':feats,
+        # 'features':feats,
         'weights':weights,
         'havekernel':havekernel,
         'nonparam':nonparam,
@@ -204,18 +207,34 @@ if __name__=='__main__':
                                centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
         ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
         out.save(name,ds,'predictions',split,PREDSDIR)
+        del arr,meta,ds
 
         if info['havekernel']:
-            logger.info('   Formatting/saving kernel-integrated features...')
-            arr,meta = out.to_array(info['features'],'features',
-                                   centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
-            ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-            out.save(name,ds,'features',split,FEATSDIR)
+
+            # logger.info('   Formatting/saving kernel-integrated features...')
+
+            # patchshape = result['geometry'].shape()
+            # arr, meta = out.to_array(
+            #     info['features'], 'features',
+            #     centers=info['centers'],
+            #     refda=info['refda'],
+            #     nkernels=info['nkernels'],
+            #     kerneldims=info['kerneldims'],
+            #     patchshape=patchshape,
+            #     nonparam=info['nonparam']
+            # )
+            # ds = out.to_dataset(arr, meta, refda=info['refda'], nkernels=info['nkernels'])
+            # out.save(name, ds, 'features', split, FEATSDIR)
 
             logger.info('   Formatting/saving normalized kernel weights...')
-            arr,meta = out.to_array(info['weights'],'weights',
-                                   kerneldims=info['kerneldims'],nonparam=info['nonparam'])
-            ds = out.to_dataset(arr,meta)
-            out.save(name,ds,'weights',split,WEIGHTSDIR)
+
+            refds = ds = xr.open_dataset('/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits/valid.h5',engine='h5netcdf')
+            arr, meta = out.to_array(
+                info['weights'], 'weights',
+                kerneldims=info['kerneldims'],
+                nonparam=info['nonparam']
+            )
+            ds = out.to_dataset(arr, meta,refds=refds)
+            out.save(name, ds, 'weights', split, WEIGHTSDIR)
 
         del model

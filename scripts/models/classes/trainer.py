@@ -5,7 +5,7 @@ import time
 import torch
 import wandb
 import logging
-from torch.cuda.amp import autocast,GradScaler
+from torch.amp import autocast,GradScaler
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,8 @@ class Trainer:
         self.use_amp        = use_amp and (device=='cuda')
         self.grad_accum_steps = grad_accum_steps
         self.optimizer      = torch.optim.Adam(self.model.parameters(),lr=lr)
-        self.scheduler      = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer,mode='min',factor=0.5,patience=2,min_lr=1e-6)
-        self.scaler         = GradScaler() if self.use_amp else None
+        self.scheduler      = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,mode='min',factor=0.5,patience=2,min_lr=1e-6)
+        self.scaler         = GradScaler('cuda') if self.use_amp else None
         self.criterion      = getattr(torch.nn,criterion)()
         if compile_model and hasattr(torch,'compile'):
             logger.info('   Compiling model with torch.compile...')
@@ -95,7 +94,7 @@ class Trainer:
                 dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
                 dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
             if self.use_amp:
-                with autocast():
+                with autocast('cuda',enabled=self.use_amp):
                     if haskernel:
                         outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
                     else:
@@ -118,8 +117,8 @@ class Trainer:
                 if (idx+1)%self.grad_accum_steps==0 or (idx+1)==len(self.trainloader):
                     self.optimizer.step()
                     self.optimizer.zero_grad()
-            totalloss += loss.item()*self.grad_accum_steps*len(targetvalues)
-        return totalloss/len(self.trainloader.dataset)
+            totalloss += loss.detach()*self.grad_accum_steps*targetvalues.numel()
+        return (totalloss/len(self.trainloader.dataset)).item()
 
     def validate_epoch(self,uselocal,haskernel):
         '''
@@ -142,7 +141,7 @@ class Trainer:
                     dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
                     dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
                 if self.use_amp:
-                    with autocast():
+                    with autocast('cuda',enabled=self.use_amp):
                         if haskernel:
                             outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
                         else:
@@ -154,8 +153,8 @@ class Trainer:
                     else:
                         outputvalues = self.model(fieldpatch,localvalues)
                     loss = self.criterion(outputvalues,targetvalues)
-                totalloss += loss.item()*len(targetvalues)
-        return totalloss/len(self.validloader.dataset)
+                totalloss += loss.detach()*targetvalues.numel()
+        return (totalloss/len(self.validloader.dataset)).item()
 
     def fit(self,name,kind,uselocal):
         '''

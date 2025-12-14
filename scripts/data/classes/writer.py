@@ -47,21 +47,56 @@ class PredictionWriter:
             return arr,{'kind':'predictions','member':member}
 
         if kind=='features':
-            if data.shape[1] != len(fieldvars)*nkernels:
-                raise ValueError('`data.shape[1]` must equal len(fieldvars) × nkernels')
-            nsamples = data.shape[0]
             nlats,nlons,ntimes = refda.shape
-            data = data.reshape(nsamples,len(fieldvars),nkernels)
-            if nonparam:
-                arr = np.full((nkernels,len(fieldvars),nlats,nlons,ntimes),np.nan,dtype=np.float32)
-                for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                    arr[:,:,latidx,lonidx,timeidx] = data[i].transpose(1,0)
-                return arr,{'kind':'features','nonparam':True}
-            data = data[...,0]
-            arr  = np.full((len(fieldvars),nlats,nlons,ntimes),np.nan,dtype=np.float32)
+
+            if data.ndim < 4:
+                raise ValueError('Feature array must have shape (nsamples, field, member, ...)')
+
+            if kerneldims is None or patchshape is None:
+                raise ValueError('`kerneldims` and `patchshape` required for feature formatting')
+
+            if nkernels is None:
+                raise ValueError('`nkernels` required for feature formatting')
+
+            nsamples = data.shape[0]
+            if data.shape[1] != len(fieldvars):
+                raise ValueError('`data.shape[1]` must equal len(fieldvars)')
+            if data.shape[2] != nkernels:
+                raise ValueError('`data.shape[2]` must equal nkernels')
+
+            kerneldims = tuple(kerneldims)
+            plats,plons,plevs,ptimes = patchshape
+
+            # preserved dims = dims NOT integrated over
+            remdims  = []
+            remshape = []
+            if 'lat' not in kerneldims:
+                remdims.append('patch_lat')
+                remshape.append(plats)
+            if 'lon' not in kerneldims:
+                remdims.append('patch_lon')
+                remshape.append(plons)
+            if 'lev' not in kerneldims:
+                remdims.append('patch_lev')
+                remshape.append(plevs)
+            if 'time' not in kerneldims:
+                remdims.append('patch_time')
+                remshape.append(ptimes)
+
+            if tuple(data.shape[3:]) != tuple(remshape):
+                raise ValueError(f'Preserved feature dims mismatch: got {data.shape[3:]}, expected {tuple(remshape)}')
+
+            # Dense array: (member, field, *patch_preserved, lat, lon, time)
+            arr = np.full((nkernels,len(fieldvars),*remshape,nlats,nlons,ntimes),np.nan,dtype=np.float32)
+
             for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                arr[:,latidx,lonidx,timeidx] = data[i]
-            return arr,{'kind':'features','nonparam':False}
+                # data[i] is (field, member, *remshape) -> (member, field, *remshape)
+                block = data[i].transpose(1,0,*range(3,data[i].ndim))
+                arr[...,latidx,lonidx,timeidx] = block
+
+            return arr,{'kind':'features','remdims':remdims,'nonparam':nonparam}
+
+
 
         if kind=='weights':
             if kerneldims is None:
@@ -83,7 +118,7 @@ class PredictionWriter:
 
         raise ValueError(f'Unknown kind `{kind}`')
 
-    def to_dataset(self,arr,meta,*,refda=None,nkernels=None):
+    def to_dataset(self,arr,meta,*,refda=None,refds=None,nkernels=None):
         '''
         Purpose: Wrap a dense ndarray into an xr.Dataset with dims/coords/attrs.
         Args:
@@ -110,26 +145,49 @@ class PredictionWriter:
         if kind=='features':
             if refda is None:
                 raise ValueError('`refda` required for feature dataset construction')
+            if nkernels is None:
+                raise ValueError('`nkernels` required for feature dataset construction')
+
+            remdims = tuple(meta.get('remdims', ()))
             ds = xr.Dataset()
-            if meta.get('nonparam',False):
-                for fieldidx,varname in enumerate(fieldvars):
-                    da = xr.DataArray(arr[:,fieldidx,...],dims=('member',)+refda.dims,
-                                      coords={'member':np.arange(nkernels),**refda.coords},name=varname)
-                    da.attrs = dict(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
-                    ds[varname] = da
-                return ds
-            for fieldidx,varname in enumerate(fieldvars):
-                da = xr.DataArray(arr[fieldidx,...],dims=refda.dims,coords=refda.coords,name=varname)
-                da.attrs = dict(long_name=f'{varname} (kernel-integrated and standardized)',units='N/A')
+
+            coords = {'member': np.arange(nkernels), **refda.coords}
+            # arr shape: (member, field, *remshape, lat, lon, time)
+            for ax, dim in enumerate(remdims, start=2):
+                coords[dim] = np.arange(arr.shape[ax])
+
+            for fieldidx, varname in enumerate(fieldvars):
+                da = xr.DataArray(
+                    arr[:, fieldidx, ...],
+                    dims=('member',) + remdims + refda.dims,
+                    coords=coords,
+                    name=varname
+                )
+                da.attrs = dict(long_name=f'{varname} (kernel-integrated; preserved patch dims)', units='N/A')
                 ds[varname] = da
+
             return ds
+
 
         if kind=='weights':
             dims   = meta['dims0'] + meta['dims1']
+
             coords = dict(meta['coords0'])
             start = len(meta['dims0'])
-            for ax,dim in enumerate(meta['dims1'],start=start):
+            
+            for ax, dim in enumerate(meta['dims1'], start=start):
+                if refds is not None:
+                    # prefer coordinate variable if present (ds.coords or ds[dim])
+                    if dim in refds.coords:
+                        coords[dim] = refds.coords[dim].values
+                        continue
+                    if dim in refds.data_vars:  # uncommon, but safe
+                        coords[dim] = refds[dim].values
+                        continue
+            
+                # fallback: index coordinate
                 coords[dim] = np.arange(arr.shape[ax])
+                
             da = xr.DataArray(arr,dims=dims,coords=coords,name='weights')
             da.attrs = dict(long_name='Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights',units='N/A')
             return da.to_dataset()
