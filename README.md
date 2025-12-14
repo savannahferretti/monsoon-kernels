@@ -30,18 +30,30 @@ Project Organization
 │   ├── splits/        <- Training, validation, and test sets
 │   └── results/       <- Model predictions (and skill metrics)
 │
-├── figs/              <- Generated figures/graphics 
+├── figs/              <- Generated figures/graphics
 │
-├── models/            
-│   ├── nn/            <- Saved NN models
-│   └── sr/            <- Saved PySR models
-|
+├── models/
+│   ├── baseline/      <- Saved baseline NN models
+│   ├── nonparametric/ <- Saved non-parametric kernel NN models
+│   └── parametric/    <- Saved parametric kernel NN models
+│
 ├── notebooks/         <- Jupyter notebooks for data analysis and visualizations
 │
-├── scripts/           
-│   ├── data/          <- Scripts for downloading, and calculating input/target terms, and splitting data
-│   ├── nn/            <- Scripts for training/evaluating baseline NNs, non-parametric kernel NNs, and parametric kernel NNs
-│   └── sr/            <- Scripts for running PySR and summarizing discovered equations 
+├── scripts/
+│   ├── data/
+│   │   ├── classes/   <- Data processing classes (DataDownloader, DataCalculator, DataSplitter, PatchDataLoader, PredictionWriter)
+│   │   ├── download.py   <- Execution script for downloading raw data
+│   │   ├── calculate.py  <- Execution script for calculating derived variables
+│   │   └── split.py      <- Execution script for creating train/valid/test splits
+│   │
+│   ├── models/
+│   │   ├── classes/      <- Model classes (Trainer, Inferencer, ModelFactory)
+│   │   ├── architectures.py  <- Neural network architectures (MainNN, BaselineNN, KernelNN)
+│   │   ├── kernels.py        <- Kernel layers (NonparametricKernelLayer, ParametricKernelLayer)
+│   │   ├── train.py          <- Execution script for training models
+│   │   └── evaluate.py       <- Execution script for model evaluation
+│   │
+│   └── utils.py       <- Configuration and utility functions
 │
 └── environment.yml    <- File for reproducing the analysis environment
 ```

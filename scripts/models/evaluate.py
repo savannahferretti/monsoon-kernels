@@ -8,9 +8,8 @@ import argparse
 import numpy as np
 import xarray as xr
 from scripts.utils import Config
-from scripts.data.inputs import InputDataModule
-from scripts.data.outputs import OutputDataModule
-from scripts.models.architectures import ModelFactory
+from scripts.data.classes import PatchDataLoader,PredictionWriter
+from scripts.models.classes import ModelFactory
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ SEED       = config.seed
 BATCHSIZE  = config.batchsize
 WORKERS    = config.workers
 
-out = OutputDataModule(FIELDVARS)
+out = PredictionWriter(FIELDVARS)
 
 def setup(seed=SEED):
     '''
@@ -71,7 +70,7 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     Args:
     - name (str): model name
     - modelconfig (dict): model configuration
-    - result (dict[str,object]): dictionary from InputDataModule.dataloaders()  
+    - result (dict[str,object]): dictionary from PatchDataLoader.dataloaders()  
     - device (str): device to use
     - fieldvars (list[str]): predictor field variable names (defaults to FIELDVARS)
     - localvars (list[str]): local input variable names (defaults to LOCALVARS)
@@ -106,7 +105,7 @@ def inference(model,split,result,uselocal,device):
     Args:
     - model (torch.nn.Module): trained model instance 
     - split (str): 'train' | 'valid' | 'test'
-    - result (dict[str,object]): dictionary from InputDataModule.dataloaders()
+    - result (dict[str,object]): dictionary from PatchDataLoader.dataloaders()
     - uselocal (bool): whether to use local inputs
     - device (str): device to use
     Returns:
@@ -168,7 +167,7 @@ if __name__=='__main__':
     models,split = parse()
 
     logger.info('Preparing evaluation split...')
-    splitdata = InputDataModule.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
+    splitdata = PatchDataLoader.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
 
     cachedconfig = None
     cachedresult = None
@@ -188,7 +187,7 @@ if __name__=='__main__':
         if currentconfig==cachedconfig:
             result = cachedresult
         else:
-            result = InputDataModule.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device) 
+            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device) 
             cachedconfig = currentconfig
             cachedresult = result
 

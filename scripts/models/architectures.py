@@ -10,7 +10,7 @@ class MainNN(torch.nn.Module):
         '''
         Purpose: Initialize a feed-forward neural network that nonlinearly maps a feature vector to a scalar prediction.
         Args:
-        - nfeatures (int): number of input features per sample (after any flattening, kernel integration, 
+        - nfeatures (int): number of input features per sample (after any flattening, kernel integration,
           and/or concatenation with local inputs)
         '''
         super().__init__()
@@ -36,7 +36,7 @@ class BaselineNN(torch.nn.Module):
 
     def __init__(self,patchshape,nfieldvars,nlocalvars,uselocal):
         '''
-        Purpose: Initialize a neural network that directly ingests space-height-time patches for one or more predictor 
+        Purpose: Initialize a neural network that directly ingests space-height-time patches for one or more predictor
         fields, then passes the patches plus optional local inputs to MainNN.
         Args:
         - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
@@ -74,15 +74,14 @@ class BaselineNN(torch.nn.Module):
 class KernelNN(torch.nn.Module):
 
     def __init__(self,intkernel,nlocalvars,uselocal,patchshape):
-        # UPDATED: Added patchshape parameter to calculate preserved dimensions
         '''
-        Purpose: Initialize a neural network that applies either non-parametric or parametric kernels over selected 
+        Purpose: Initialize a neural network that applies either non-parametric or parametric kernels over selected
         dimensions of each predictor patch, then passes the resulting kernel features plus optional local inputs to MainNN.
-        
+
         Notes:
         - Feature count depends on which dimensions are preserved (not integrated over by the kernel)
         - Example: vertical-only kernel with patch (3,3,16,7) preserves (3,3,7) → nfeatures = nfields*nkernels*3*3*7
-        
+
         Args:
         - intkernel (torch.nn.Module): instance of NonparametricKernelLayer or ParametricKernelLayer
         - nlocalvars (int): number of local inputs
@@ -96,9 +95,7 @@ class KernelNN(torch.nn.Module):
         self.uselocal    = bool(uselocal)
         self.nkernels    = int(intkernel.nkernels)
         self.kerneldims  = tuple(intkernel.kerneldims)
-        
-        # UPDATED: Calculate number of features based on preserved (non-integrated) dimensions
-        # Dimensions where kernel doesn't vary are preserved in the output
+
         plats, plons, plevs, ptimes = patchshape
         preserved_size = 1
         if 'lat' not in self.kerneldims:
@@ -109,7 +106,7 @@ class KernelNN(torch.nn.Module):
             preserved_size *= plevs
         if 'time' not in self.kerneldims:
             preserved_size *= ptimes
-        
+
         nfeatures = self.nfieldvars * self.nkernels * preserved_size
         if self.uselocal:
             nfeatures += self.nlocalvars
@@ -135,37 +132,3 @@ class KernelNN(torch.nn.Module):
         else:
             X = features
         return self.model(X)
-
-class ModelFactory:
-
-    @staticmethod
-    def build(name,modelconfig,patchshape,nfieldvars,nlocalvars):
-        '''
-        Purpose: Build a model instance from configuration.
-        Args:
-        - name (str): model name
-        - modelconfig (dict[str,object]): model configuration
-        - patchshape (tuple[int,int,int,int]): (plats, plons, plevs, ptimes)
-        - nfieldvars (int): number of predictor fields
-        - nlocalvars (int): number of local inputs
-        Returns:
-        - torch.nn.Module: initialized model
-        '''
-        kind     = modelconfig['kind']
-        uselocal = modelconfig['uselocal']
-        if kind=='baseline':
-            model = BaselineNN(patchshape,nfieldvars,nlocalvars,uselocal)
-        elif kind=='nonparametric':
-            nkernels   = modelconfig['nkernels']
-            kerneldims = modelconfig['kerneldims']
-            intkernel  = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims)
-            model = KernelNN(intkernel,nlocalvars,uselocal,patchshape)
-        elif kind=='parametric':
-            nkernels   = modelconfig['nkernels']
-            kerneldict = modelconfig['kerneldict']
-            intkernel = ParametricKernelLayer(nfieldvars,nkernels,kerneldict)
-            model = KernelNN(intkernel,nlocalvars,uselocal,patchshape)
-        else:
-            raise ValueError(f'Unknown model kind `{kind}`')
-        model.nparams = sum(param.numel() for param in model.parameters())
-        return model

@@ -5,9 +5,8 @@ import argparse
 import numpy as np
 import torch
 from scripts.utils import Config
-from scripts.data.inputs import InputDataModule
-from scripts.models.architectures import ModelFactory
-from scripts.models.classes import Trainer
+from scripts.data.classes import PatchDataLoader
+from scripts.models.classes import ModelFactory,Trainer
 
 logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(levelname)s - %(message)s',datefmt='%H:%M:%S')
 logger = logging.getLogger(__name__)
@@ -68,7 +67,7 @@ if __name__=='__main__':
     device = setup(config.seed)
     models = parse()
     logger.info('Preparing data splits...')
-    splitdata    = InputDataModule.prepare(['train','valid'],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
+    splitdata    = PatchDataLoader.prepare(['train','valid'],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
     cachedconfig = None
     cachedresult = None
     for modelconfig in config.models:
@@ -83,7 +82,7 @@ if __name__=='__main__':
         if currentconfig==cachedconfig:
             result = cachedresult
         else:
-            result = InputDataModule.dataloaders(splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device)
+            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device)
             cachedconfig = currentconfig
             cachedresult = result
         model = initialize(name,modelconfig,result,device,config.fieldvars,config.localvars)
