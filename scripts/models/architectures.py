@@ -97,20 +97,22 @@ class KernelNN(torch.nn.Module):
         self.kerneldims  = tuple(intkernel.kerneldims)
 
         plats, plons, plevs, ptimes = patchshape
-        preserved_size = 1
-        if 'lat' not in self.kerneldims:
-            preserved_size *= plats
-        if 'lon' not in self.kerneldims:
-            preserved_size *= plons
-        if 'lev' not in self.kerneldims:
-            preserved_size *= plevs
-        if 'time' not in self.kerneldims:
-            preserved_size *= ptimes
 
-        nfeatures = self.nfieldvars * self.nkernels * preserved_size
+        # ---------------------------------------------------------------
+        # EDIT: preserved_size calculation updated to match KernelModule.integrate()
+        # We now slice to the center for dims NOT in kerneldims (local), so they
+        # contribute factor 1 instead of full patch length.
+        preserved_size = 1
+        # If you ever intentionally want to preserve a dimension, you'd do so by
+        # *not* slicing it in KernelModule.integrate. With the current definition,
+        # dims not in kerneldims are local -> preserved factor remains 1.
+        # ---------------------------------------------------------------
+
+        nfeatures = self.nfieldvars * self.nkernels * preserved_size  # EDIT: now just F*K for vertical kernel
         if self.uselocal:
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
+
 
     def forward(self,fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues=None):
         '''
@@ -124,7 +126,21 @@ class KernelNN(torch.nn.Module):
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
+
         features = self.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
+        
+        # ---------------------------------------------------------------
+        # EDIT (optional but helpful): one-time shape print to verify (B, F*K)
+        if not hasattr(self, "_printed_kernel_shape"):
+            self._printed_kernel_shape = True
+            print("[KernelNN] kerneldims =", self.kerneldims, "| features shape =", tuple(features.shape))
+        # ---------------------------------------------------------------
+        
+        if not hasattr(self, "_printed_kernel_stats"):
+            self._printed_kernel_stats = True
+            print("[KernelNN] features mean/std:",
+                  features.mean().item(), features.std().item())
+
         if self.uselocal:
             if localvalues is None:
                 raise ValueError('`localvalues` must be provided when `uselocal` is True')
@@ -132,3 +148,4 @@ class KernelNN(torch.nn.Module):
         else:
             X = features
         return self.model(X)
+

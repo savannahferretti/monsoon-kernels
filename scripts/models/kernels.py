@@ -73,9 +73,36 @@ class KernelModule:
 
     @staticmethod
     def integrate(fieldpatch, weights, dareapatch, dlevpatch, dtimepatch, kerneldims):
-    
+        """
+        Purpose: Integrate the predictor fields using normalized kernel weights.
+
+        EDIT (important): For dimensions NOT in kerneldims, we make the operator LOCAL
+        by selecting the center index along that dimension (x0, t0). This matches the
+        "vertical kernel" definition: local in x and t, nonlocal only in p.
+        """
+        # ---------------------------------------------------------------------
+        # EDIT: enforce locality (center-point) for dims not in kerneldims
+        # fieldpatch: (B,F,Y,X,P,T)
+        B, F, Y, X, P, T = fieldpatch.shape
+
+        if 'lat' not in kerneldims:
+            y0 = Y // 2
+            fieldpatch = fieldpatch[:, :, y0:y0+1, :, :, :]     # keep Y=1
+            dareapatch = dareapatch[:, y0:y0+1, :]              # keep Y=1
+
+        if 'lon' not in kerneldims:
+            x0 = X // 2
+            fieldpatch = fieldpatch[:, :, :, x0:x0+1, :, :]     # keep X=1
+            dareapatch = dareapatch[:, :, x0:x0+1]              # keep X=1
+
+        if 'time' not in kerneldims:
+            t0 = T // 2
+            fieldpatch = fieldpatch[:, :, :, :, :, t0:t0+1]     # keep T=1
+            dtimepatch = dtimepatch[:, t0:t0+1]                 # keep T=1
+        # ---------------------------------------------------------------------
+
         weighted = fieldpatch.unsqueeze(2) * weights.unsqueeze(0)  # (B,F,K,Y,X,P,T)
-    
+
         # build quadrature factor with broadcastable shape (B,1,1,Y,X,P,T)
         quad = 1.0
         if ('lat' in kerneldims) or ('lon' in kerneldims):
@@ -84,15 +111,15 @@ class KernelModule:
             quad = quad * dlevpatch[:, None, None, None, None, :, None]
         if 'time' in kerneldims:
             quad = quad * dtimepatch[:, None, None, None, None, None, :]
-    
+
         weighted = weighted * quad
-    
+
         dims_to_sum = []
         if 'lat' in kerneldims:  dims_to_sum.append(3)  # Y
         if 'lon' in kerneldims:  dims_to_sum.append(4)  # X
         if 'lev' in kerneldims:  dims_to_sum.append(5)  # P
         if 'time' in kerneldims: dims_to_sum.append(6)  # T
-    
+
         return weighted.sum(dim=dims_to_sum) if dims_to_sum else weighted
 
 
@@ -196,27 +223,40 @@ class NonparametricKernelLayer(torch.nn.Module):
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels*preserved_dims)
         '''
+
         weights = self.get_weights(dareapatch, dlevpatch, dtimepatch, device=fieldpatch.device)
     
-        # 2) integrate USING quadrature (new signature)
         feats = KernelModule.integrate(
             fieldpatch, weights,
             dareapatch, dlevpatch, dtimepatch,
             self.kerneldims
         )
     
-        # 3) store + return flattened features
+        # ------------------------------------------------------------------
+        # DEBUG CHECK: vertical-kernel sanity check (prints once)
+        # ------------------------------------------------------------------
+        if not hasattr(self, "_printed_shape"):
+            self._printed_shape = True
+        
+            print("\n[Kernel sanity check]")
+            print(f"  kerneldims = {self.kerneldims}")
+            print(f"  features shape (pre-flatten) = {feats.shape}")
+        
+            # # feats is output of integrate(): starts as (B,F,K,Y,X,P,T) then sums over dims in kerneldims
+            # # For kerneldims=('lev',), lev is summed -> output is (B,F,K,Y,X,T)
+            # if 'lat' not in self.kerneldims:
+            #     assert feats.shape[3] == 1, "Latitude should be local (size 1)"
+            # if 'lon' not in self.kerneldims:
+            #     assert feats.shape[4] == 1, "Longitude should be local (size 1)"
+            # if 'time' not in self.kerneldims:
+            #     assert feats.shape[5] == 1, "Time should be local (size 1)"
+        
+            # print("  ✔ vertical-kernel shape check passed\n")
+        # ------------------------------------------------------------------
+    
         self.features = feats
         return feats.flatten(1)
 
-
-        # dareamean = dareapatch.mean(dim=0)
-        # dlevmean  = dlevpatch.mean(dim=0)
-        # dtimemean = dtimepatch.mean(dim=0)
-        # weights   = self.get_weights(dareamean,dlevmean,dtimemean,fieldpatch.device)
-        # # self.features = KernelModule.integrate(fieldpatch,weights,self.kerneldims)
-        # features = KernelModule.integrate(fieldpatch, weights, dareapatch, dlevpatch, dtimepatch, self.kerneldims)
-        # return self.features.flatten(1)
         
 class ParametricKernelLayer(torch.nn.Module):
          
