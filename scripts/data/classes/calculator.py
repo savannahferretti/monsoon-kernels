@@ -251,53 +251,56 @@ class DataCalculator:
             logger.exception('      Failed to save or verify')
             return False
 
-    def calculate_all(self):
-        '''
-        Purpose: Calculate and process all derived variables.
-        Returns:
-        - bool: True if all calculations successful, False otherwise
-        '''
-        logger.info('Importing all raw variables...')
-        ps  = self.retrieve('ERA5_surface_pressure')
-        t   = self.retrieve('ERA5_air_temperature')
-        q   = self.retrieve('ERA5_specific_humidity')
-        lf  = self.retrieve('ERA5_land_fraction')
-        lhf = self.retrieve('ERA5_mean_surface_latent_heat_flux')
-        shf = self.retrieve('ERA5_mean_surface_sensible_heat_flux')
-        pr  = self.retrieve('IMERG_V06_precipitation_rate')
-        logger.info('Resampling/regridding variables...')
-        ps  = self.regrid(ps).load()
-        t   = self.regrid(t).load()
-        q   = self.regrid(q).load()
-        lf  = self.regrid(lf).load()
-        lhf = self.regrid(lhf).load()
-        shf = self.regrid(shf).load()
-        pr  = self.regrid(self.resample(pr)).clip(min=0).load()
-        logger.info('Calculating relative humidity and equivalent potential temperature terms...')
-        p          = self.create_p_array(q)
-        rh         = self.calc_rh(p,t,q)
-        thetae     = self.calc_thetae(p,t,q)
-        thetaestar = self.calc_thetae(p,t)
-        logger.info('Calculating quadrature weights...')
-        darea,dlev,dtime = self.calc_quadrature_weights(t)
-        logger.info('Creating datasets...')
-        dslist = [
-            self.create_dataset(t,'t','Air temperature','K'),
-            self.create_dataset(q,'q','Specific humidity','kg/kg'),
-            self.create_dataset(rh,'rh','Relative humidity','%'),
-            self.create_dataset(thetae,'thetae','Equivalent potential temperature','K'),
-            self.create_dataset(thetaestar,'thetaestar','Saturated equivalent potential temperature','K'),
-            self.create_dataset(lf,'lf','Land fraction','0-1'),
-            self.create_dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
-            self.create_dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
-            self.create_dataset(pr,'pr','Precipitation rate','mm/hr'),
-            self.create_dataset(darea,'darea','Horizontal area weights','m²'),
-            self.create_dataset(dlev,'dlev','Vertical thickness weights','Pa'),
-            self.create_dataset(dtime,'dtime','Time step weights (constant cadence)','s')]
-        logger.info('Saving datasets...')
-        success = True
-        for ds in dslist:
-            if not self.save(ds):
-                success = False
-            del ds
-        return success
+
+def calculate_all(calculator):
+    '''
+    Purpose: Calculate and process all derived variables using a DataCalculator instance.
+    Args:
+    - calculator (DataCalculator): initialized DataCalculator instance
+    Returns:
+    - bool: True if all calculations successful, False otherwise
+    '''
+    logger.info('Importing all raw variables...')
+    ps  = calculator.retrieve('ERA5_surface_pressure')
+    t   = calculator.retrieve('ERA5_air_temperature')
+    q   = calculator.retrieve('ERA5_specific_humidity')
+    lf  = calculator.retrieve('ERA5_land_fraction')
+    lhf = calculator.retrieve('ERA5_mean_surface_latent_heat_flux')
+    shf = calculator.retrieve('ERA5_mean_surface_sensible_heat_flux')
+    pr  = calculator.retrieve('IMERG_V06_precipitation_rate')
+    logger.info('Resampling/regridding variables...')
+    ps  = calculator.regrid(ps).load()
+    t   = calculator.regrid(t).load()
+    q   = calculator.regrid(q).load()
+    lf  = calculator.regrid(lf).load()
+    lhf = calculator.regrid(lhf).load()
+    shf = calculator.regrid(shf).load()
+    pr  = calculator.regrid(calculator.resample(pr)).clip(min=0).load()
+    logger.info('Calculating relative humidity and equivalent potential temperature terms...')
+    p          = calculator.create_p_array(q)
+    rh         = calculator.calc_rh(p,t,q)
+    thetae     = calculator.calc_thetae(p,t,q)
+    thetaestar = calculator.calc_thetae(p,t)
+    logger.info('Calculating quadrature weights...')
+    darea,dlev,dtime = calculator.calc_quadrature_weights(t)
+    logger.info('Creating datasets...')
+    dslist = [
+        calculator.create_dataset(t,'t','Air temperature','K'),
+        calculator.create_dataset(q,'q','Specific humidity','kg/kg'),
+        calculator.create_dataset(rh,'rh','Relative humidity','%'),
+        calculator.create_dataset(thetae,'thetae','Equivalent potential temperature','K'),
+        calculator.create_dataset(thetaestar,'thetaestar','Saturated equivalent potential temperature','K'),
+        calculator.create_dataset(lf,'lf','Land fraction','0-1'),
+        calculator.create_dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
+        calculator.create_dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
+        calculator.create_dataset(pr,'pr','Precipitation rate','mm/hr'),
+        calculator.create_dataset(darea,'darea','Horizontal area weights','m²'),
+        calculator.create_dataset(dlev,'dlev','Vertical thickness weights','Pa'),
+        calculator.create_dataset(dtime,'dtime','Time step weights (constant cadence)','s')]
+    logger.info('Saving datasets...')
+    success = True
+    for ds in dslist:
+        if not calculator.save(ds):
+            success = False
+        del ds
+    return success
