@@ -58,7 +58,10 @@ class KernelModule:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars, nkernels, ...) where ... are non-summed dimensions
         '''
         # ---------------------------------------------------------------------
-        # EDIT: enforce locality (center-point) for dims not in kerneldims
+        # Enforce locality for dims not in kerneldims:
+        # - lat/lon: use center point (defined by radius)
+        # - lev: use surface level (last index, closest to surface)
+        # - time: use most recent time step (last index)
         # fieldpatch: (B,F,Y,X,P,T)
         B, F, Y, X, P, T = fieldpatch.shape
 
@@ -72,8 +75,13 @@ class KernelModule:
             fieldpatch = fieldpatch[:, :, :, x0:x0+1, :, :]     # keep X=1
             dareapatch = dareapatch[:, :, x0:x0+1]              # keep X=1
 
+        if 'lev' not in kerneldims:
+            p0 = P - 1  # surface level (closest to surface)
+            fieldpatch = fieldpatch[:, :, :, :, p0:p0+1, :]     # keep P=1
+            dlevpatch = dlevpatch[:, p0:p0+1]                   # keep P=1
+
         if 'time' not in kerneldims:
-            t0 = T // 2
+            t0 = T - 1  # most recent time step
             fieldpatch = fieldpatch[:, :, :, :, :, t0:t0+1]     # keep T=1
             dtimepatch = dtimepatch[:, t0:t0+1]                 # keep T=1
         # ---------------------------------------------------------------------
