@@ -15,12 +15,12 @@ class DataCalculator:
         '''
         Purpose: Initialize DataCalculator with configuration parameters.
         Args:
-        - author (str): author name for metadata
-        - email (str): author email for metadata
-        - filedir (str): directory containing raw NetCDF files
-        - savedir (str): directory to save processed files
-        - latrange (tuple[float,float]): target latitude range
-        - lonrange (tuple[float,float]): target longitude range
+        - author (str): author name
+        - email (str): author email
+        - filedir (str): directory containing NetCDF files
+        - savedir (str): output directory
+        - latrange (tuple[float,float]): latitude range
+        - lonrange (tuple[float,float]): longitude range
         '''
         self.author   = author
         self.email    = email
@@ -31,11 +31,11 @@ class DataCalculator:
 
     def retrieve(self,longname):
         '''
-        Purpose: Lazily import a NetCDF file as a DataArray with ascending pressure levels.
+        Purpose: Lazily import in a NetCDF file as an xr.DataArray with ascending pressure levels, if applicable (e.g., [500,550,600,...] hPa).
         Args:
         - longname (str): variable description
         Returns:
-        - xr.DataArray: DataArray with levels ordered if applicable
+        - xr.DataArray: DataArray with levels ordered (if applicable)
         '''
         filename = f'{longname}.nc'
         filepath = os.path.join(self.filedir,filename)
@@ -48,9 +48,9 @@ class DataCalculator:
 
     def create_p_array(self,refda):
         '''
-        Purpose: Create a pressure DataArray from the lev dimension.
+        Purpose: Create a pressure xr.DataArray from the 'lev' dimension.
         Args:
-        - refda (xr.DataArray): reference DataArray containing lev
+        - refda (xr.DataArray): reference DataArray containing 'lev'
         Returns:
         - xr.DataArray: pressure DataArray
         '''
@@ -59,7 +59,8 @@ class DataCalculator:
 
     def resample(self,da):
         '''
-        Purpose: Compute centered hourly mean using two half-hour samples.
+        Purpose: Compute a centered hourly mean (uses the two half-hour samples that straddle each hour; falls back to 
+        one at boundaries).
         Args:
         - da (xr.DataArray): input DataArray
         Returns:
@@ -71,9 +72,9 @@ class DataCalculator:
 
     def regrid(self,da):
         '''
-        Purpose: Regrid a DataArray to 1.0° × 1.0° grid extending 1 cell beyond domain.
+        Purpose: Regrid a DataArray to 1.0° × 1.0° grid extending 1 grid cell beyond the target domain.
         Args:
-        - da (xr.DataArray): input DataArray with radius
+        - da (xr.DataArray): input DataArray with radius (for better interpolation)
         Returns:
         - xr.DataArray: regridded DataArray
         '''
@@ -86,11 +87,11 @@ class DataCalculator:
 
     def calc_es(self,t):
         '''
-        Purpose: Calculate saturation vapor pressure using Huang (2018) equations.
+        Purpose: Calculate saturation vapor pressure (eₛ) using Eqs. 17 and 18 from Huang J. (2018), J. Appl. Meteorol. Climatol.
         Args:
-        - t (xr.DataArray): temperature DataArray in K
+        - t (xr.DataArray): temperature DataArray (K)
         Returns:
-        - xr.DataArray: saturation vapor pressure in hPa
+        - xr.DataArray: eₛ DataArray (hPa)
         '''
         tc = t-273.15
         eswat = np.exp(34.494-(4924.99/(tc+237.1)))/((tc+105.0)**1.57)
@@ -100,12 +101,12 @@ class DataCalculator:
 
     def calc_qs(self,p,t):
         '''
-        Purpose: Calculate saturation specific humidity using Miller (2018) equation.
+        Purpose: Calculate saturation specific humidity (qₛ) using Eq. 4 from Miller SFK. (2018), Atmos. Humidity Eq. Plymouth State Wea. Ctr.
         Args:
-        - p (xr.DataArray): pressure DataArray in hPa
-        - t (xr.DataArray): temperature DataArray in K
+        - p (xr.DataArray): pressure DataArray (hPa)
+        - t (xr.DataArray): temperature DataArray (K)
         Returns:
-        - xr.DataArray: saturation specific humidity in kg/kg
+        - xr.DataArray: qₛ DataArray (kg/kg)
         '''
         rv = 461.50
         rd = 287.04
@@ -116,13 +117,13 @@ class DataCalculator:
 
     def calc_rh(self,p,t,q):
         '''
-        Purpose: Calculate relative humidity using saturation specific humidity.
+        Purpose: Calculate relative humidity (RH) using qₛ.
         Args:
-        - p (xr.DataArray): pressure DataArray in hPa
-        - t (xr.DataArray): temperature DataArray in K
-        - q (xr.DataArray): specific humidity DataArray in kg/kg
+        - p (xr.DataArray): pressure DataArray (hPa)
+        - t (xr.DataArray): temperature DataArray (K)
+        - q (xr.DataArray): specific humidity DataArray (kg/kg)
         Returns:
-        - xr.DataArray: relative humidity in %
+        - xr.DataArray: RH DataArray (%)
         '''
         qs = self.calc_qs(p,t)
         rh = (q/qs)*100.0
@@ -131,13 +132,14 @@ class DataCalculator:
 
     def calc_thetae(self,p,t,q=None):
         '''
-        Purpose: Calculate equivalent potential temperature using Bolton (1980) equations.
+        Purpose: Calculate equivalent potential temperature (θₑ) using Eqs. 43 and 55 from Bolton D. (1980), Mon. Wea. Rev. 
+        Options to calculate θₑ at the surface, or the saturated θₑ, are given.        
         Args:
-        - p (xr.DataArray): pressure DataArray in hPa
-        - t (xr.DataArray): temperature DataArray in K
-        - q (xr.DataArray, optional): specific humidity in kg/kg; if None, saturated θₑ computed
+        - p (xr.DataArray): pressure DataArray (hPa)
+        - t (xr.DataArray): temperature DataArray (K)
+        - q (xr.DataArray, optional): specific humidity DataArray (kg/kg); if None, saturated θₑ computed
         Returns:
-        - xr.DataArray: equivalent potential temperature in K
+        - xr.DataArray: unsaturated/saturated θₑ DataArray (K)
         '''
         if q is None:
             q = self.calc_qs(p,t)
@@ -153,10 +155,10 @@ class DataCalculator:
 
     def calc_quadrature_weights(self,refda,rearth=6.371e6):
         '''
-        Purpose: Compute separable quadrature components for a 4D grid.
+        Purpose: Compute separable quadrature components (ΔA, Δp, and Δt) for a 4D grid.
         Args:
-        - refda (xr.DataArray): reference DataArray with lat, lon, lev, time
-        - rearth (float): Earth radius in meters (defaults to 6,371,000)
+        - refda (xr.DataArray): reference DataArray with dimension 'lat', 'lon', 'lev', and 'time'
+        - rearth (float): Earth's radius (defaults to 6,371,000 m)
         Returns:
         - tuple(xr.DataArray,xr.DataArray,xr.DataArray): horizontal area, vertical thickness, time step weights
         '''
@@ -168,9 +170,9 @@ class DataCalculator:
         times = refda.time.values
         def spacing(coord):
             '''
-            Purpose: Estimate spacing using centered differences.
+            Purpose: Estimate spacing between grid points of a single dimension using centered differences.
             Args:
-            - coord (np.ndarray): 1D monotonically increasing coordinates
+            - coord (np.ndarray): 1D NumPy array of monotonically increasing coordinates
             Returns:
             - np.ndarray: spacing between grid points
             '''
@@ -192,14 +194,14 @@ class DataCalculator:
 
     def create_dataset(self,da,shortname,longname,units):
         '''
-        Purpose: Wrap a DataArray into a Dataset with metadata.
+        Purpose: Wrap an xr.DataArray into a xr.Dataset with metadata.
         Args:
         - da (xr.DataArray): input DataArray
         - shortname (str): variable name
         - longname (str): variable description
         - units (str): variable units
         Returns:
-        - xr.Dataset: Dataset with variable and metadata
+        - xr.Dataset: Dataset containing the variable named 'shortname' and metadata
         '''
         dims = [dim for dim in ('lat','lon','lev','time') if dim in da.dims]
         da = da.transpose(*dims)
@@ -219,10 +221,10 @@ class DataCalculator:
 
     def save(self,ds,timechunksize=2208):
         '''
-        Purpose: Save a Dataset to NetCDF and verify by reopening.
+        Purpose: Save an xr.Dataset to NetCDF and verify by reopening.
         Args:
         - ds (xr.Dataset): Dataset to save
-        - timechunksize (int): chunk size for time dimension (defaults to 2208)
+        - timechunksize (int): chunk size for time dimension (defaults to 2,208 for 3-month chunks)
         Returns:
         - bool: True if save successful, False otherwise
         '''
