@@ -58,7 +58,7 @@ if __name__=='__main__':
         calculator.create_dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),
         calculator.create_dataset(pr,'pr','Precipitation rate','mm/hr'),
         calculator.create_dataset(darea,'darea','Horizontal area weights','m²'),
-        calculator.create_dataset(dlev,'dlev','Vertical thickness weights','Pa'),
+        calculator.create_dataset(dlev,'dlev','Vertical thickness weights','hPa'),
         calculator.create_dataset(dtime,'dtime','Time step weights (constant cadence)','s')]
 
     logger.info('Saving datasets...')

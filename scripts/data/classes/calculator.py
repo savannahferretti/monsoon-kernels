@@ -166,7 +166,7 @@ class DataCalculator:
         refda = refda.transpose(*dims)
         lats  = refda.lat.values
         lons  = refda.lon.values
-        levs  = refda.lev.values*100.0
+        levs  = refda.lev.values
         times = refda.time.values
         def spacing(coord):
             '''
