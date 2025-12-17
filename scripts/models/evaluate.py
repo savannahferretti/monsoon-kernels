@@ -127,7 +127,6 @@ def inference(model,split,result,uselocal,device):
 
     model.eval()
     predslist  = []
-    # featslist  = []
     weights    = None
 
     with torch.no_grad():
@@ -139,9 +138,6 @@ def inference(model,split,result,uselocal,device):
                 dlevpatch  = batch['dlevpatch'].to(device)
                 dtimepatch = batch['dtimepatch'].to(device)
                 outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
-                # if model.intkernel.features is None:
-                #     raise RuntimeError('`model.intkernel.features` was not populated during forward pass')
-                # featslist.append(model.intkernel.features.detach().cpu().numpy())
                 if weights is None:
                     if model.intkernel.weights is None:
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
@@ -152,12 +148,10 @@ def inference(model,split,result,uselocal,device):
             predslist.append(outputvalues.detach().cpu().numpy())
 
     preds = np.concatenate(predslist,axis=0).astype(np.float32)
-    # feats = np.concatenate(featslist,axis=0).astype(np.float32) if (havekernel and len(featslist)>0) else None
     weights = weights.astype(np.float32) if weights is not None else None
 
     return {
         'predictions':preds,
-        # 'features':feats,
         'weights':weights,
         'havekernel':havekernel,
         'nonparam':nonparam,
@@ -210,22 +204,6 @@ if __name__=='__main__':
         del arr,meta,ds
 
         if info['havekernel']:
-
-            # logger.info('   Formatting/saving kernel-integrated features...')
-
-            # patchshape = result['geometry'].shape()
-            # arr, meta = out.to_array(
-            #     info['features'], 'features',
-            #     centers=info['centers'],
-            #     refda=info['refda'],
-            #     nkernels=info['nkernels'],
-            #     kerneldims=info['kerneldims'],
-            #     patchshape=patchshape,
-            #     nonparam=info['nonparam']
-            # )
-            # ds = out.to_dataset(arr, meta, refda=info['refda'], nkernels=info['nkernels'])
-            # out.save(name, ds, 'features', split, FEATSDIR)
-
             logger.info('   Formatting/saving normalized kernel weights...')
 
             refds = ds = xr.open_dataset('/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits/valid.h5',engine='h5netcdf')

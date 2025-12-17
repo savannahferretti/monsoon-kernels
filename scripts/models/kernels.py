@@ -42,44 +42,21 @@ class KernelModule:
         weights  = kernel/integral[:,:,None,None,None,None]
         return weights
 
-    # @staticmethod
-    # def integrate(fieldpatch,weights,kerneldims):
-    #     '''
-    #     Purpose: Integrate the predictor fields using normalized kernel weights, summing only over 
-    #     dimensions where the kernel varies and preserving all other dimensions.
-    #     Args:
-    #     - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-    #     - weights (torch.Tensor): normalized kernel weights with shape (nfieldvars, nkernels, plats_or_1, plons_or_1, plevs_or_1, ptimes_or_1)
-    #     - kerneldims (tuple[str] | list[str]): dimensions the kernel varies along
-    #     Returns:
-    #     - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels*remaining_dims)
-    #       where remaining_dims are the spatial/temporal dimensions not integrated over
-    #     '''
-    #     weighted = fieldpatch.unsqueeze(2) * weights.unsqueeze(0)
-    #     dims_to_sum = []
-    #     if 'lat' in kerneldims:
-    #         dims_to_sum.append(3)  #
-    #     if 'lon' in kerneldims:
-    #         dims_to_sum.append(4) 
-    #     if 'lev' in kerneldims:
-    #         dims_to_sum.append(5) 
-    #     if 'time' in kerneldims:
-    #         dims_to_sum.append(6)  
-    #     if dims_to_sum:
-    #         features = weighted.sum(dim=dims_to_sum)
-    #     else:
-    #         features = weighted
-    #     return features
 
     @staticmethod
     def integrate(fieldpatch, weights, dareapatch, dlevpatch, dtimepatch, kerneldims):
-        """
-        Purpose: Integrate the predictor fields using normalized kernel weights.
-
-        EDIT (important): For dimensions NOT in kerneldims, we make the operator LOCAL
-        by selecting the center index along that dimension (x0, t0). This matches the
-        "vertical kernel" definition: local in x and t, nonlocal only in p.
-        """
+        '''
+        Purpose: Integrate predictor fields using normalized kernel weights. For dimensions NOT in kerneldims, the operator is made LOCAL by selecting the center index.
+        Args:
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - weights (torch.Tensor): normalized kernel weights with shape (nfieldvars, nkernels, plats_or_1, plons_or_1, plevs_or_1, ptimes_or_1)
+        - dareapatch (torch.Tensor): horizontal area weights patch with shape (nbatch, plats, plons)
+        - dlevpatch (torch.Tensor): vertical thickness weights patch with shape (nbatch, plevs)
+        - dtimepatch (torch.Tensor): time step weights patch with shape (nbatch, ptimes)
+        - kerneldims (tuple[str] | list[str]): dimensions the kernel varies along
+        Returns:
+        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars, nkernels, ...) where ... are non-summed dimensions
+        '''
         # ---------------------------------------------------------------------
         # EDIT: enforce locality (center-point) for dims not in kerneldims
         # fieldpatch: (B,F,Y,X,P,T)
@@ -142,11 +119,21 @@ class NonparametricKernelLayer(torch.nn.Module):
         self.features   = None
 
     def get_weights(self, dareapatch, dlevpatch, dtimepatch, device):
+        '''
+        Purpose: Obtain normalized non-parametric kernel weights over a patch.
+        Args:
+        - dareapatch (torch.Tensor): horizontal area weights patch with shape (plats, plons) or (nbatch, plats, plons)
+        - dlevpatch (torch.Tensor): vertical thickness weights patch with shape (plevs,) or (nbatch, plevs)
+        - dtimepatch (torch.Tensor): time step weights patch with shape (ptimes,) or (nbatch, ptimes)
+        - device (str | torch.device): device to use
+        Returns:
+        - torch.Tensor: normalized kernel weights of shape (nfieldvars, nkernels, plats_or_1, plons_or_1, plevs_or_1, ptimes_or_1)
+        '''
         dareapatch = dareapatch.to(device)
         dlevpatch  = dlevpatch.to(device)
         dtimepatch = dtimepatch.to(device)
-    
-        # NEW: if batched, use the first sample for kernel normalization
+
+        # If batched, use the first sample for kernel normalization
         if dareapatch.dim() == 3:  # (B,Y,X)
             dareapatch0 = dareapatch[0]
         else:
@@ -173,47 +160,15 @@ class NonparametricKernelLayer(torch.nn.Module):
             ]
             kernel = torch.ones(self.nfieldvars, self.nkernels, *kernelshape,
                                 dtype=dareapatch0.dtype, device=device)
-            kernel = kernel + torch.randn_like(kernel) * 0.01
+            kernel = kernel + torch.randn_like(kernel) * 0.2
             self.kernel = torch.nn.Parameter(kernel)
     
-        self.weights = KernelModule.normalize(self.kernel, dareapatch0, dlevpatch0, dtimepatch0, self.kerneldims)
+        self.weights = KernelModule.normalize(self.kernel, dareapatch0, dlevpatch0, dtimepatch0, self.kerneldims, epsilon=1e-6)
         return self.weights
 
-    # def get_weights(self,dareapatch,dlevpatch,dtimepatch,device):
-    #     '''
-    #     Purpose: Obtain normalized non-parametric kernel weights over a patch.
-    #     Args:
-    #     - dareapatch (torch.Tensor): horizontal area weights patch with shape (plats, plons)
-    #     - dlevpatch (torch.Tensor): vertical thickness weights patch with shape (plevs,)
-    #     - dtimepatch (torch.Tensor): time step weights patch with shape (ptimes,)
-    #     - device (str | torch.device): device to use
-    #     Returns:
-    #     - torch.Tensor: normalized kernel weights of shape (nfieldvars, nkernels, plats_or_1, plons_or_1, plevs_or_1, ptimes_or_1)
-    #     '''
-    #     dareapatch = dareapatch.to(device)
-    #     dlevpatch  = dlevpatch.to(device)
-    #     dtimepatch = dtimepatch.to(device)
-    #     plats,plons = dareapatch.shape
-    #     plevs       = dlevpatch.numel()
-    #     ptimes      = dtimepatch.numel()
-    #     if self.kernel is None:
-    #         kernelshape = [
-    #             plats  if 'lat' in self.kerneldims else 1,
-    #             plons  if 'lon' in self.kerneldims else 1,
-    #             plevs  if 'lev' in self.kerneldims else 1,
-    #             ptimes if 'time' in self.kerneldims else 1]
-    #         kernel = torch.ones(self.nfieldvars,self.nkernels,*kernelshape,dtype=dareapatch.dtype,device=device)
-    #         kernel = kernel+torch.randn_like(kernel)*0.01
-    #         self.kernel = torch.nn.Parameter(kernel)
-    #     self.weights = KernelModule.normalize(self.kernel,dareapatch,dlevpatch,dtimepatch,self.kerneldims)
-    #     return self.weights
-        
     def forward(self,fieldpatch,dareapatch,dlevpatch,dtimepatch):
         '''
         Purpose: Apply learned non-parametric kernels to a batch of patches and compute kernel-integrated features.
-        
-        Notes:
-        - Features preserve dimensions where kernel doesn't vary (e.g., vertical kernel preserves spatial and temporal dims)
         
         Args:
         - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
@@ -231,29 +186,7 @@ class NonparametricKernelLayer(torch.nn.Module):
             dareapatch, dlevpatch, dtimepatch,
             self.kerneldims
         )
-    
-        # ------------------------------------------------------------------
-        # DEBUG CHECK: vertical-kernel sanity check (prints once)
-        # ------------------------------------------------------------------
-        if not hasattr(self, "_printed_shape"):
-            self._printed_shape = True
-        
-            print("\n[Kernel sanity check]")
-            print(f"  kerneldims = {self.kerneldims}")
-            print(f"  features shape (pre-flatten) = {feats.shape}")
-        
-            # # feats is output of integrate(): starts as (B,F,K,Y,X,P,T) then sums over dims in kerneldims
-            # # For kerneldims=('lev',), lev is summed -> output is (B,F,K,Y,X,T)
-            # if 'lat' not in self.kerneldims:
-            #     assert feats.shape[3] == 1, "Latitude should be local (size 1)"
-            # if 'lon' not in self.kerneldims:
-            #     assert feats.shape[4] == 1, "Longitude should be local (size 1)"
-            # if 'time' not in self.kerneldims:
-            #     assert feats.shape[5] == 1, "Time should be local (size 1)"
-        
-            # print("  ✔ vertical-kernel shape check passed\n")
-        # ------------------------------------------------------------------
-    
+
         self.features = feats
         return feats.flatten(1)
 
@@ -367,9 +300,6 @@ class ParametricKernelLayer(torch.nn.Module):
         '''
         Purpose: Apply learned parametric kernels to a batch of patches and compute kernel-integrated features.
         
-        Notes:
-        - Features preserve dimensions where kernel doesn't vary (e.g., vertical kernel preserves spatial and temporal dims)
-        
         Args:
         - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - dareapatch (torch.Tensor): horizontal area weights patch with shape (nbatch, plats, plons)
@@ -382,5 +312,6 @@ class ParametricKernelLayer(torch.nn.Module):
         dlevmean  = dlevpatch.mean(dim=0)
         dtimemean = dtimepatch.mean(dim=0)
         weights   = self.get_weights(dareamean,dlevmean,dtimemean,fieldpatch.device)
-        self.features = KernelModule.integrate(fieldpatch,weights,self.kerneldims)
-        return self.features.flatten(1)
+        feats = KernelModule.integrate(fieldpatch, weights, dareapatch, dlevpatch, dtimepatch, self.kerneldims)
+        self.features = feats
+        return feats.flatten(1)
