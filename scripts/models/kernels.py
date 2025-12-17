@@ -46,7 +46,7 @@ class KernelModule:
     @staticmethod
     def integrate(fieldpatch, weights, dareapatch, dlevpatch, dtimepatch, kerneldims):
         '''
-        Purpose: Integrate predictor fields using normalized kernel weights. For dimensions NOT in kerneldims, the operator is made LOCAL by selecting the center index.
+        Purpose: Integrate predictor fields using normalized kernel weights over kerneled dimensions, preserving non-kerneled dimensions.
         Args:
         - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - weights (torch.Tensor): normalized kernel weights with shape (nfieldvars, nkernels, plats_or_1, plons_or_1, plevs_or_1, ptimes_or_1)
@@ -55,37 +55,10 @@ class KernelModule:
         - dtimepatch (torch.Tensor): time step weights patch with shape (nbatch, ptimes)
         - kerneldims (tuple[str] | list[str]): dimensions the kernel varies along
         Returns:
-        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars, nkernels, ...) where ... are non-summed dimensions
+        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars, nkernels, ...) where ... are preserved non-kerneled dimensions
         '''
-        # ---------------------------------------------------------------------
-        # Enforce locality for dims not in kerneldims:
-        # - lat/lon: use center point (defined by radius)
-        # - lev: use surface level (last index, closest to surface)
-        # - time: use most recent time step (last index)
-        # fieldpatch: (B,F,Y,X,P,T)
-        B, F, Y, X, P, T = fieldpatch.shape
-
-        if 'lat' not in kerneldims:
-            y0 = Y // 2
-            fieldpatch = fieldpatch[:, :, y0:y0+1, :, :, :]     # keep Y=1
-            dareapatch = dareapatch[:, y0:y0+1, :]              # keep Y=1
-
-        if 'lon' not in kerneldims:
-            x0 = X // 2
-            fieldpatch = fieldpatch[:, :, :, x0:x0+1, :, :]     # keep X=1
-            dareapatch = dareapatch[:, :, x0:x0+1]              # keep X=1
-
-        if 'lev' not in kerneldims:
-            p0 = P - 1  # surface level (closest to surface)
-            fieldpatch = fieldpatch[:, :, :, :, p0:p0+1, :]     # keep P=1
-            dlevpatch = dlevpatch[:, p0:p0+1]                   # keep P=1
-
-        if 'time' not in kerneldims:
-            t0 = T - 1  # most recent time step
-            fieldpatch = fieldpatch[:, :, :, :, :, t0:t0+1]     # keep T=1
-            dtimepatch = dtimepatch[:, t0:t0+1]                 # keep T=1
-        # ---------------------------------------------------------------------
-
+        # Dimensions IN kerneldims: integrated over (summed with quadrature)
+        # Dimensions NOT in kerneldims: preserved in output
         weighted = fieldpatch.unsqueeze(2) * weights.unsqueeze(0)  # (B,F,K,Y,X,P,T)
 
         # build quadrature factor with broadcastable shape (B,1,1,Y,X,P,T)

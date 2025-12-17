@@ -91,9 +91,19 @@ class KernelNN(torch.nn.Module):
 
         plats, plons, plevs, ptimes = patchshape
 
-        # For dimensions NOT in kerneldims, the operator is local (center point only)
-        # so preserved_size = 1
+        # Calculate preserved_size: product of dimensions NOT in kerneldims
+        # Dimensions IN kerneldims get integrated (summed) away
+        # Dimensions NOT in kerneldims are preserved in the features
         preserved_size = 1
+        if 'lat' not in self.kerneldims:
+            preserved_size *= plats
+        if 'lon' not in self.kerneldims:
+            preserved_size *= plons
+        if 'lev' not in self.kerneldims:
+            preserved_size *= plevs
+        if 'time' not in self.kerneldims:
+            preserved_size *= ptimes
+
         nfeatures = self.nfieldvars * self.nkernels * preserved_size
         if self.uselocal:
             nfeatures += self.nlocalvars
