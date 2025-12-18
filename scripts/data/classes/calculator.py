@@ -59,8 +59,7 @@ class DataCalculator:
 
     def resample(self,da):
         '''
-        Purpose: Compute a centered hourly mean (uses the two half-hour samples that straddle each hour; falls back to 
-        one at boundaries).
+        Purpose: Compute a centered hourly mean (uses the two half-hour samples that straddle each hour; falls back to one at boundaries).
         Args:
         - da (xr.DataArray): input DataArray
         Returns:
@@ -154,12 +153,12 @@ class DataCalculator:
 
     def calc_quadrature_weights(self,refda,rearth=6.371e6):
         '''
-        Purpose: Compute separable quadrature components (ΔA, Δp, and Δt) for a 4D grid.
+        Purpose: Compute separable quadrature components for a 4D grid (ΔA, Δp, and Δt).
         Args:
         - refda (xr.DataArray): reference DataArray with dimension 'lat', 'lon', 'lev', and 'time'
         - rearth (float): Earth's radius (defaults to 6,371,000 m)
         Returns:
-        - tuple(xr.DataArray,xr.DataArray,xr.DataArray): DataArryas of weights for ΔA (m²), Δp (hPa), and Δt (s)
+        - tuple(xr.DataArray,xr.DataArray,xr.DataArray): DataArrays of weights for ΔA (m²), Δp (hPa), and Δt (s)
         '''
         dims  = ('lat','lon','lev','time')
         refda = refda.transpose(*dims)
