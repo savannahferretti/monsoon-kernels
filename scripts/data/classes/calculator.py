@@ -17,8 +17,8 @@ class DataCalculator:
         Args:
         - author (str): author name
         - email (str): author email
-        - filedir (str): directory containing NetCDF files
-        - savedir (str): output directory
+        - filedir (str): directory containing input NetCDF files
+        - savedir (str): directory to save output files
         - latrange (tuple[float,float]): latitude range
         - lonrange (tuple[float,float]): longitude range
         '''
@@ -200,7 +200,7 @@ class DataCalculator:
         - longname (str): variable description
         - units (str): variable units
         Returns:
-        - xr.Dataset: Dataset containing the variable named 'shortname' and metadata
+        - xr.Dataset: Dataset containing the variable and metadata
         '''
         dims = [dim for dim in ('lat','lon','lev','time') if dim in da.dims]
         da = da.transpose(*dims)

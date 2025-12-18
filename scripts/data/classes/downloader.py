@@ -19,11 +19,11 @@ class DataDownloader:
         '''
         Purpose: Initialize DataDownloader with configuration parameters.
         Args:
-        - author (str): author name for metadata
-        - email (str): author email for metadata
-        - savedir (str): directory to save downloaded files
-        - latrange (tuple[float,float]): latitude range for subsetting
-        - lonrange (tuple[float,float]): longitude range for subsetting
+        - author (str): author name
+        - email (str): author email
+        - savedir (str): directory to save output files
+        - latrange (tuple[float,float]): latitude range
+        - lonrange (tuple[float,float]): longitude range
         - levrange (tuple[float,float]): pressure level range in hPa
         - years (list[int]): years to include
         - months (list[int]): months to include
@@ -124,14 +124,14 @@ class DataDownloader:
 
     def create_dataset(self,da,shortname,longname,units):
         '''
-        Purpose: Wrap a DataArray into a Dataset with metadata.
+        Purpose: Wrap an xr.DataArray into a xr.Dataset with metadata.
         Args:
         - da (xr.DataArray): input DataArray
         - shortname (str): variable name
         - longname (str): variable description
         - units (str): variable units
         Returns:
-        - xr.Dataset: Dataset with variable and metadata
+        - xr.Dataset: Dataset containing the variable and metadata
         '''
         ds = da.to_dataset(name=shortname)
         ds[shortname].attrs = dict(long_name=longname,units=units)
@@ -169,7 +169,7 @@ class DataDownloader:
         Purpose: Save a Dataset to NetCDF and verify by reopening.
         Args:
         - ds (xr.Dataset): Dataset to save
-        - timechunksize (int): chunk size for time dimension (defaults to 2208)
+        - timechunksize (int): chunk size for time dimension (defaults to 2,208 for 3-month chunks)
         Returns:
         - bool: True if save successful, False otherwise
         '''
