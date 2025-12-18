@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 if __name__=='__main__':
-    config = Config()
+    config     = Config()
     calculator = DataCalculator(config.author,config.email,config.rawdir,config.interimdir,config.latrange,config.lonrange)
     logger.info('Importing all raw variables...')
     ps  = calculator.retrieve('ERA5_surface_pressure')
