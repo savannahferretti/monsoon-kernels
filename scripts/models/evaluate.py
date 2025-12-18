@@ -89,14 +89,14 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     nfieldvars = len(fieldvars)
     nlocalvars = len(localvars)
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
-    if hasattr(model, "intkernel") and hasattr(model.intkernel, "kernel") and (model.intkernel.kernel is None):
-        batch = next(iter(result["loaders"]["valid"]))  # or "test"
+    if hasattr(model,"intkernel") and hasattr(model.intkernel,"kernel") and (model.intkernel.kernel is None):
+        batch = next(iter(result["loaders"]["valid"]))
         with torch.no_grad():
-            fieldpatch = batch["fieldpatch"].to(device, non_blocking=True)
-            dareapatch = batch["dareapatch"].to(device, non_blocking=True)
-            dlevpatch  = batch["dlevpatch"].to(device, non_blocking=True)
-            dtimepatch = batch["dtimepatch"].to(device, non_blocking=True)
-            _ = model.intkernel(fieldpatch, dareapatch, dlevpatch, dtimepatch)
+            fieldpatch = batch["fieldpatch"].to(device,non_blocking=True)
+            dareapatch = batch["dareapatch"].to(device,non_blocking=True)
+            dlevpatch  = batch["dlevpatch"].to(device,non_blocking=True)
+            dtimepatch = batch["dtimepatch"].to(device,non_blocking=True)
+            _ = model.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
     state = torch.load(filepath,map_location='cpu')
     model.load_state_dict(state)
     return model.to(device)
@@ -198,21 +198,19 @@ if __name__=='__main__':
 
         logger.info('   Formatting/saving predictions...')
         arr,meta = out.to_array(info['predictions'],'predictions',
-                               centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
+            centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
         ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
         out.save(name,ds,'predictions',split,PREDSDIR)
         del arr,meta,ds
 
         if info['havekernel']:
             logger.info('   Formatting/saving normalized kernel weights...')
-
             refds = ds = xr.open_dataset('/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits/valid.h5',engine='h5netcdf')
-            arr, meta = out.to_array(
-                info['weights'], 'weights',
+            arr,meta = out.to_array(
+                info['weights'],'weights',
                 kerneldims=info['kerneldims'],
-                nonparam=info['nonparam']
-            )
-            ds = out.to_dataset(arr, meta,refds=refds)
-            out.save(name, ds, 'weights', split, WEIGHTSDIR)
+                nonparam=info['nonparam'])
+            ds = out.to_dataset(arr,meta,refds=refds)
+            out.save(name,ds,'weights',split,WEIGHTSDIR)
 
         del model

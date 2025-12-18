@@ -90,10 +90,6 @@ class KernelNN(torch.nn.Module):
         self.kerneldims  = tuple(intkernel.kerneldims)
 
         plats, plons, plevs, ptimes = patchshape
-
-        # Calculate preserved_size: product of dimensions NOT in kerneldims
-        # Dimensions IN kerneldims get integrated (summed) away
-        # Dimensions NOT in kerneldims are preserved in the features
         preserved_size = 1
         if 'lat' not in self.kerneldims:
             preserved_size *= plats
@@ -109,7 +105,6 @@ class KernelNN(torch.nn.Module):
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
 
-
     def forward(self,fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues=None):
         '''
         Purpose: Forward pass through KernelNN.
@@ -122,7 +117,6 @@ class KernelNN(torch.nn.Module):
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
-
         features = self.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
 
         if self.uselocal:

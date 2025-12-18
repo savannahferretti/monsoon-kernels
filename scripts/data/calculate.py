@@ -48,6 +48,7 @@ if __name__=='__main__':
         calculator.create_dataset(rh,'rh','Relative humidity','%'),
         calculator.create_dataset(thetae,'thetae','Equivalent potential temperature','K'),
         calculator.create_dataset(thetaestar,'thetaestar','Saturated equivalent potential temperature','K'),
+        calculator.create_dataset(ps,'ps','Surface pressure','hPa'),
         calculator.create_dataset(lf,'lf','Land fraction','0-1'),
         calculator.create_dataset(lhf,'lhf','Mean surface latent heat flux','W/m²'),
         calculator.create_dataset(shf,'shf','Mean surface sensible heat flux','W/m²'),

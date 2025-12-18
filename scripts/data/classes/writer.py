@@ -85,18 +85,13 @@ class PredictionWriter:
 
             if tuple(data.shape[3:]) != tuple(remshape):
                 raise ValueError(f'Preserved feature dims mismatch: got {data.shape[3:]}, expected {tuple(remshape)}')
-
-            # Dense array: (member, field, *patch_preserved, lat, lon, time)
             arr = np.full((nkernels,len(fieldvars),*remshape,nlats,nlons,ntimes),np.nan,dtype=np.float32)
 
             for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                # data[i] is (field, member, *remshape) -> (member, field, *remshape)
                 block = data[i].transpose(1,0,*range(3,data[i].ndim))
                 arr[...,latidx,lonidx,timeidx] = block
 
             return arr,{'kind':'features','remdims':remdims,'nonparam':nonparam}
-
-
 
         if kind=='weights':
             if kerneldims is None:
@@ -165,29 +160,22 @@ class PredictionWriter:
                 )
                 da.attrs = dict(long_name=f'{varname} (kernel-integrated; preserved patch dims)', units='N/A')
                 ds[varname] = da
-
             return ds
-
 
         if kind=='weights':
             dims   = meta['dims0'] + meta['dims1']
 
             coords = dict(meta['coords0'])
             start = len(meta['dims0'])
-            
-            for ax, dim in enumerate(meta['dims1'], start=start):
+            for ax,dim in enumerate(meta['dims1'],start=start):
                 if refds is not None:
-                    # prefer coordinate variable if present (ds.coords or ds[dim])
                     if dim in refds.coords:
                         coords[dim] = refds.coords[dim].values
                         continue
-                    if dim in refds.data_vars:  # uncommon, but safe
+                    if dim in refds.data_vars:
                         coords[dim] = refds[dim].values
                         continue
-            
-                # fallback: index coordinate
                 coords[dim] = np.arange(arr.shape[ax])
-                
             da = xr.DataArray(arr,dims=dims,coords=coords,name='weights')
             da.attrs = dict(long_name='Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights',units='N/A')
             return da.to_dataset()
