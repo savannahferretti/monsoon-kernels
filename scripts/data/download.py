@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 if __name__=='__main__':
-    config = Config()
+    config     = Config()
     downloader = DataDownloader(config.author,config.email,config.rawdir,config.latrange,config.lonrange,config.levrange,config.years,config.months)
     logger.info('Retrieving ERA5 and IMERG data...')
     era5  = downloader.retrieve_era5()
