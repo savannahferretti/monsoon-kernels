@@ -30,7 +30,7 @@ class DataSplitter:
 
     def split(self,splitrange):
         '''
-        Purpose: Load all NetCDF files into a single Dataset for a given split.
+        Purpose: Load all NetCDF files into a single xr.Dataset for a given split.
         Args:
         - splitrange (tuple[int,int]): inclusive year range for the split
         Returns:
@@ -75,7 +75,7 @@ class DataSplitter:
 
     def normalize(self,ds,stats):
         '''
-        Purpose: Normalize a Dataset using training statistics.
+        Purpose: Normalize an xr.Dataset using training statistics.
         Args:
         - ds (xr.Dataset): Dataset to normalize
         - stats (dict): normalization mean and standard deviation from training set
@@ -103,7 +103,7 @@ class DataSplitter:
 
     def save(self,ds,splitname,timechunksize=2208):
         '''
-        Purpose: Save a Dataset to an HDF5 file and verify by reopening.
+        Purpose: Save an xr.Dataset to an HDF5 file and verify by reopening.
         Args:
         - ds (xr.Dataset): Dataset to save
         - splitname (str): train, valid, or test
