@@ -11,14 +11,7 @@ warnings.filterwarnings('ignore')
 
 if __name__=='__main__':
     config = Config()
-    calculator = DataCalculator(
-        author=config.author,
-        email=config.email,
-        filedir=config.rawdir,
-        savedir=config.interimdir,
-        latrange=config.latrange,
-        lonrange=config.lonrange)
-
+    calculator = DataCalculator(config.author,config.email,config.rawdir,config.interimdir,config.latrange,config.lonrange)
     logger.info('Importing all raw variables...')
     ps  = calculator.retrieve('ERA5_surface_pressure')
     t   = calculator.retrieve('ERA5_air_temperature')
@@ -27,7 +20,6 @@ if __name__=='__main__':
     lhf = calculator.retrieve('ERA5_mean_surface_latent_heat_flux')
     shf = calculator.retrieve('ERA5_mean_surface_sensible_heat_flux')
     pr  = calculator.retrieve('IMERG_V06_precipitation_rate')
-
     logger.info('Resampling/regridding variables...')
     ps  = calculator.regrid(ps).load()
     t   = calculator.regrid(t).load()
@@ -36,16 +28,13 @@ if __name__=='__main__':
     lhf = calculator.regrid(lhf).load()
     shf = calculator.regrid(shf).load()
     pr  = calculator.regrid(calculator.resample(pr)).clip(min=0).load()
-
     logger.info('Calculating relative humidity and equivalent potential temperature terms...')
     p          = calculator.create_p_array(q)
     rh         = calculator.calc_rh(p,t,q)
     thetae     = calculator.calc_thetae(p,t,q)
     thetaestar = calculator.calc_thetae(p,t)
-
     logger.info('Calculating quadrature weights...')
     darea,dlev,dtime = calculator.calc_quadrature_weights(t)
-
     logger.info('Creating datasets...')
     dslist = [
         calculator.create_dataset(t,'t','Air temperature','K'),
@@ -60,7 +49,6 @@ if __name__=='__main__':
         calculator.create_dataset(darea,'darea','Horizontal area weights','m²'),
         calculator.create_dataset(dlev,'dlev','Vertical thickness weights','hPa'),
         calculator.create_dataset(dtime,'dtime','Time step weights (constant cadence)','s')]
-
     logger.info('Saving datasets...')
     for ds in dslist:
         calculator.save(ds)
