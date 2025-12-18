@@ -14,7 +14,15 @@ warnings.filterwarnings('ignore')
 
 if __name__=='__main__':
     config     = Config()
-    downloader = DataDownloader(config.author,config.email,config.rawdir,config.latrange,config.lonrange,config.levrange,config.years,config.months)
+    downloader = DataDownloader(
+        author=config.author,
+        email=config.email,
+        savedir=config.rawdir,
+        latrange=config.latrange,
+        lonrange=config.lonrange,
+        levrange=config.levrange,
+        years=config.years,
+        months=config.months)
     logger.info('Retrieving ERA5 and IMERG data...')
     era5  = downloader.retrieve_era5()
     imerg = downloader.retrieve_imerg()
