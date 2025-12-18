@@ -11,7 +11,13 @@ warnings.filterwarnings('ignore')
 
 if __name__=='__main__':
     config     = Config()
-    calculator = DataCalculator(config.author,config.email,config.rawdir,config.interimdir,config.latrange,config.lonrange)
+    calculator = DataCalculator(
+        author=config.author,
+        email=config.email,
+        filedir=config.rawdir,
+        savedir=config.interimdir,
+        latrange=config.latrange,
+        lonrange=config.lonrange)
     logger.info('Importing all raw variables...')
     ps  = calculator.retrieve('ERA5_surface_pressure')
     t   = calculator.retrieve('ERA5_air_temperature')
