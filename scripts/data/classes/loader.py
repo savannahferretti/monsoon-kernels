@@ -7,9 +7,9 @@ import xarray as xr
 
 class PatchGeometry:
 
-    def __init__(self, radius, maxlevs, timelag):
+    def __init__(self,radius,maxlevs,timelag):
         '''
-        Purpose: Initialize patch geometry to infer patch shape and valid patch centers.
+        Purpose: Initialize PatchGeometry with configuration parameters.
         Args:
         - radius (int): number of horizontal grid points to include on each side of the center point
         - maxlevs (int): maximum number of vertical levels to include
@@ -25,13 +25,13 @@ class PatchGeometry:
         Returns:
         - tuple[int,int,int,int]: patch shape as (plats, plons, plevs, ptimes)
         '''
-        plats  = 2 * self.radius + 1
-        plons  = 2 * self.radius + 1
+        plats  = 2*self.radius+1
+        plons  = 2*self.radius+1
         plevs  = self.maxlevs
-        ptimes = self.timelag + 1 if self.timelag > 0 else 1
-        return (plats, plons, plevs, ptimes)
+        ptimes = self.timelag+1 if self.timelag>0 else 1
+        return (plats,plons,plevs,ptimes)
 
-    def centers(self, target, lats, lons, latrange, lonrange):
+    def centers(self,target,lats,lons,latrange,lonrange):
         '''
         Purpose: Build valid patch centers where patches fit, targets are finite, and centers lie in the prediction domain.
         Args:
@@ -43,27 +43,17 @@ class PatchGeometry:
         Returns:
         - list[tuple[int,int,int]]: list of (latidx, lonidx, timeidx) patch centers
         '''
-        nlats, nlons, ntimes       = target.shape
-        latidxs, lonidxs, timeidxs = torch.nonzero(torch.isfinite(target), as_tuple=True)
-
-        lats_t = torch.as_tensor(lats, dtype=torch.float32)
-        lons_t = torch.as_tensor(lons, dtype=torch.float32)
-
-        patchfits = (
-            (latidxs >= self.radius) & (latidxs < nlats - self.radius) &
-            (lonidxs >= self.radius) & (lonidxs < nlons - self.radius)
-        )
-        indomain = (
-            (lats_t[latidxs] >= latrange[0]) & (lats_t[latidxs] <= latrange[1]) &
-            (lons_t[lonidxs] >= lonrange[0]) & (lons_t[lonidxs] <= lonrange[1])
-        )
-
-        valid = patchfits & indomain
-        return list(zip(latidxs[valid].tolist(), lonidxs[valid].tolist(), timeidxs[valid].tolist()))
+        nlats,nlons,ntimes       = target.shape
+        latidxs,lonidxs,timeidxs = torch.nonzero(torch.isfinite(target),as_tuple=True)
+        lats = torch.as_tensor(lats,dtype=torch.float32)
+        lons = torch.as_tensor(lons,dtype=torch.float32)
+        patchfits = ((latidxs>=self.radius)&(latidxs<nlats-self.radius)&(lonidxs>=self.radius)&(lonidxs<nlons-self.radius))
+        indomain  = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons[lonidxs]<=lonrange[1]))
+        return list(zip(latidxs[patchfits&indomain].tolist(),lonidxs[patchfits&indomain].tolist(),timeidxs[patchfits&indomain].tolist()))
 
 class PatchDataset(torch.utils.data.Dataset):
 
-    def __init__(self, geometry, centers, field, darea, dlev, dtime, local, target, uselocal):
+    def __init__(self,geometry,centers,field,darea,dlev,dtime,local,target,uselocal):
         '''
         Purpose: Initialize dataset for returning patches of predictor fields and quadrature weights.
         Args:
@@ -78,24 +68,20 @@ class PatchDataset(torch.utils.data.Dataset):
         - uselocal (bool): whether to use local inputs
         '''
         super().__init__()
-
-        if field.ndim != 5:
+        if field.ndim!=5:
             raise ValueError('`field` must have shape (nfieldvars, nlats, nlons, nlevs, ntimes)')
-        if darea.ndim != 2:
+        if darea.ndim!=2:
             raise ValueError('`darea` must have shape (nlats, nlons)')
-        if dlev.ndim != 1:
+        if dlev.ndim!=1:
             raise ValueError('`dlev` must have shape (nlevs,)')
-        if dtime.ndim != 1:
+        if dtime.ndim!=1:
             raise ValueError('`dtime` must have shape (ntimes,)')
-        if local is not None and local.ndim != 4:
+        if local is not None and local.ndim!=4:
             raise ValueError('`local` must have shape (nlocalvars, nlats, nlons, ntimes) or be None')
-        if target.ndim != 3:
+        if target.ndim!=3:
             raise ValueError('`target` must have shape (nlats, nlons, ntimes)')
-
         self.geometry = geometry
         self.centers  = list(centers)
-
-        # store as tensors (CPU). DataLoader + pin_memory will handle fast H2D copies.
         self.field    = field
         self.darea    = darea
         self.dlev     = dlev
@@ -112,13 +98,13 @@ class PatchDataset(torch.utils.data.Dataset):
         '''
         return len(self.centers)
 
-    def __getitem__(self, idx):
+    def __getitem__(self,idx):
         '''
         Purpose: Return patch center indices for batch extraction in collate function.
         Args:
         - idx (int): index into centers list
         Returns:
-        - tuple[int,int,int]: (latidx, lonidx, timeidx) patch center
+        - tuple[int,int,int]: (latidx, lonidx, timeidx) patch centers
         '''
         return self.centers[idx]
 
@@ -276,8 +262,8 @@ class PatchDataLoader:
         return result
 
     @staticmethod
-    def dataloaders(splitdata, patchconfig, uselocal, latrange, lonrange, batchsize, workers, device):
-        geometry = PatchGeometry(patchconfig['radius'], patchconfig['maxlevs'], patchconfig['timelag'])
+    def dataloaders(splitdata,patchconfig, uselocal, latrange, lonrange, batchsize, workers, device):
+        geometry = PatchGeometry(patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'])
 
         kwargs = dict(
             num_workers=workers,
@@ -295,7 +281,7 @@ class PatchDataLoader:
             centers[split] = geometry.centers(data['target'], data['lats'], data['lons'], latrange, lonrange)
 
             datasets[split] = PatchDataset(
-                geometry, centers[split], data['field'],
+                geometry,centers[split],data['field'],
                 data['darea'], data['dlev'], data['dtime'],
                 data['local'], data['target'], uselocal
             )
@@ -309,8 +295,7 @@ class PatchDataLoader:
             )
 
         return {
-            'geometry': geometry,
-            'centers': centers,
-            'datasets': datasets,
-            'loaders': loaders
-        }
+            'geometry':geometry,
+            'centers':centers,
+            'datasets':datasets,
+            'loaders':loaders}
