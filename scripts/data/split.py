@@ -17,4 +17,19 @@ if __name__=='__main__':
         trainrange=config.trainrange,
         validrange=config.validrange,
         testrange=config.testrange)
-    splitter.split_all()
+
+    logger.info('Setting up splits...')
+    splits = [
+        ('train',splitter.trainrange),
+        ('valid',splitter.validrange),
+        ('test',splitter.testrange)]
+
+    logger.info('Creating and saving normalized data splits...')
+    trainstats = None
+    for splitname,splitrange in splits:
+        splitds = splitter.split(splitrange)
+        if splitname=='train':
+            trainstats = splitter.calc_stats(splitds)
+        ds = splitter.normalize(splitds,trainstats)
+        splitter.save(ds,splitname)
+        del ds

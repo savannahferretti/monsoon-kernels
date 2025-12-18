@@ -134,27 +134,3 @@ class DataSplitter:
         except Exception:
             logger.exception('      Failed to save or verify')
             return False
-
-    def split_all(self):
-        '''
-        Purpose: Create and save normalized data splits for train, valid, and test.
-        Returns:
-        - bool: True if all splits successful, False otherwise
-        '''
-        logger.info('Setting up splits...')
-        splits = [
-            ('train',self.trainrange),
-            ('valid',self.validrange),
-            ('test',self.testrange)]
-        logger.info('Creating and saving normalized data splits...')
-        success = True
-        trainstats = None
-        for splitname,splitrange in splits:
-            splitds = self.split(splitrange)
-            if splitname=='train':
-                trainstats = self.calc_stats(splitds)
-            ds = self.normalize(splitds,trainstats)
-            if not self.save(ds,splitname):
-                success = False
-            del ds
-        return success
