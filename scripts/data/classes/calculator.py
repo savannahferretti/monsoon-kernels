@@ -132,14 +132,13 @@ class DataCalculator:
 
     def calc_thetae(self,p,t,q=None):
         '''
-        Purpose: Calculate equivalent potential temperature (θₑ) using Eqs. 43 and 55 from Bolton D. (1980), Mon. Wea. Rev. 
-        Options to calculate θₑ at the surface, or the saturated θₑ, are given.        
+        Purpose: Calculate (unsaturated or saturated) equivalent potential temperature (θₑ) using Eqs. 43 and 55 from Bolton D. (1980), Mon. Wea. Rev.     
         Args:
         - p (xr.DataArray): pressure DataArray (hPa)
         - t (xr.DataArray): temperature DataArray (K)
         - q (xr.DataArray, optional): specific humidity DataArray (kg/kg); if None, saturated θₑ computed
         Returns:
-        - xr.DataArray: unsaturated/saturated θₑ DataArray (K)
+        - xr.DataArray: unsaturated or saturated θₑ DataArray (K)
         '''
         if q is None:
             q = self.calc_qs(p,t)
@@ -160,7 +159,7 @@ class DataCalculator:
         - refda (xr.DataArray): reference DataArray with dimension 'lat', 'lon', 'lev', and 'time'
         - rearth (float): Earth's radius (defaults to 6,371,000 m)
         Returns:
-        - tuple(xr.DataArray,xr.DataArray,xr.DataArray): horizontal area, vertical thickness, time step weights
+        - tuple(xr.DataArray,xr.DataArray,xr.DataArray): DataArryas of weights for ΔA (m²), Δp (hPa), and Δt (s)
         '''
         dims  = ('lat','lon','lev','time')
         refda = refda.transpose(*dims)
