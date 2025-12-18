@@ -14,20 +14,10 @@ warnings.filterwarnings('ignore')
 
 if __name__=='__main__':
     config = Config()
-    downloader = DataDownloader(
-        author=config.author,
-        email=config.email,
-        savedir=config.rawdir,
-        latrange=config.latrange,
-        lonrange=config.lonrange,
-        levrange=config.levrange,
-        years=config.years,
-        months=config.months)
-
+    downloader = DataDownloader(config.author,config.email,config.rawdir,config.latrange,config.lonrange,config.levrange,config.years,config.months)
     logger.info('Retrieving ERA5 and IMERG data...')
     era5  = downloader.retrieve_era5()
     imerg = downloader.retrieve_imerg()
-
     logger.info('Extracting variable data...')
     psdata  = era5.surface_pressure/100.0
     tdata   = era5.temperature
@@ -37,7 +27,6 @@ if __name__=='__main__':
     shfdata = era5.mean_surface_sensible_heat_flux
     prdata  = imerg.precipitationCal
     del era5,imerg
-
     logger.info('Creating datasets...')
     dslist = [
         downloader.process(psdata,'ps','ERA5 surface pressure','hPa',radius=4),
@@ -48,7 +37,6 @@ if __name__=='__main__':
         downloader.process(shfdata,'shf','ERA5 mean surface sensible heat flux','W/m²',radius=4),
         downloader.process(prdata,'pr','IMERG V06 precipitation rate','mm/hr',radius=10)]
     del psdata,tdata,qdata,lfdata,lhfdata,shfdata,prdata
-
     logger.info('Saving datasets...')
     for ds in dslist:
         downloader.save(ds)
