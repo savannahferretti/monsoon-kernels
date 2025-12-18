@@ -24,7 +24,7 @@ class DataDownloader:
         - savedir (str): directory to save output files
         - latrange (tuple[float,float]): latitude range
         - lonrange (tuple[float,float]): longitude range
-        - levrange (tuple[float,float]): pressure level range in hPa
+        - levrange (tuple[float,float]): pressure level range
         - years (list[int]): years to include
         - months (list[int]): months to include
         '''
@@ -72,7 +72,7 @@ class DataDownloader:
 
     def standardize(self,da):
         '''
-        Purpose: Standardize dimension names, data types, and order of a DataArray.
+        Purpose: Standardize dimension names, data types, and order of an xr.DataArray.
         Args:
         - da (xr.DataArray): input DataArray
         Returns:
@@ -97,7 +97,7 @@ class DataDownloader:
 
     def subset(self,da,radius=0):
         '''
-        Purpose: Subset a DataArray by horizontal domain, pressure levels, and time.
+        Purpose: Subset an xr.DataArray by horizontal domain, pressure levels, and time.
         Args:
         - da (xr.DataArray): input DataArray
         - radius (int): grid cells beyond domain bounds for regridding (defaults to 0)
@@ -149,7 +149,7 @@ class DataDownloader:
 
     def process(self,da,shortname,longname,units,radius=0):
         '''
-        Purpose: Apply standardize, subset, and create_dataset in sequence.
+        Purpose: Apply standardize(), subset(), and create_dataset() in sequence.
         Args:
         - da (xr.DataArray): input DataArray
         - shortname (str): variable name
