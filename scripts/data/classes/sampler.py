@@ -168,8 +168,7 @@ def _collate_patches(batch,dataset:PatchDataset):
         'dareapatch':dareapatch,
         'dlevpatch':dlevpatch,
         'dtimepatch':dtimepatch,
-        'targetvalues':targetvalues
-    }
+        'targetvalues':targetvalues}
     if dataset.uselocal and dataset.local is not None:
         localvalues = dataset.local[:,latidx,lonidx,timeidx].permute(1,0).contiguous()
         out['localvalues'] = localvalues
@@ -213,8 +212,7 @@ class PatchDataLoader:
                 'dlev':dlev,
                 'dtime':dtime,
                 'lats':ds.lat.values,
-                'lons':ds.lon.values
-            }
+                'lons':ds.lon.values}
         return result
 
     @staticmethod
@@ -241,12 +239,11 @@ class PatchDataLoader:
         datasets = {}
         loaders  = {}
         for split,data in splitdata.items():
-            centers[split] = geometry.centers(data['target'],data['lats'],data['lons'],latrange,lonrange)
+            centers[split]  = geometry.centers(data['target'],data['lats'],data['lons'],latrange,lonrange)
             datasets[split] = PatchDataset(geometry,centers[split],data['field'],data['darea'],data['dlev'],data['dtime'],data['local'],data['target'],uselocal)
-            loaders[split] = torch.utils.data.DataLoader(datasets[split],batch_size=batchsize,shuffle=(split=='train'),collate_fn=lambda batch,ds=datasets[split]:_collate_patches(batch,ds),**kwargs)
+            loaders[split]  = torch.utils.data.DataLoader(datasets[split],batch_size=batchsize,shuffle=(split=='train'),collate_fn=lambda batch,ds=datasets[split]:_collate_patches(batch,ds),**kwargs)
         return {
             'geometry':geometry,
             'centers':centers,
             'datasets':datasets,
-            'loaders':loaders
-        }
+            'loaders':loaders}
