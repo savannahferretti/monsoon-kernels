@@ -96,7 +96,7 @@ class DataSplitter:
                 norm   = (da.values-mean)/std
                 suffix = ' (standardized)'
             normda = xr.DataArray(norm.astype(np.float32),dims=da.dims,coords=da.coords,name=da.name)
-            normda.attrs = dict(long_name=da.attrs.get('long_name',da.name)+suffix,units='N/A')
+            normda.attrs = dict(long_name=da.attrs['long_name']+suffix,units='N/A')
             datavars[varname] = normda
         normds = xr.Dataset(datavars,coords=ds.coords)
         return normds
@@ -106,8 +106,8 @@ class DataSplitter:
         Purpose: Save an xr.Dataset to an HDF5 file and verify by reopening.
         Args:
         - ds (xr.Dataset): Dataset to save
-        - splitname (str): train, valid, or test
-        - timechunksize (int): chunk size for time dimension (defaults to 2208)
+        - splitname (str): 'train' | 'valid' | 'test'
+        - timechunksize (int): chunk size for time dimension (defaults to 2,208 for 3-month chunks)
         Returns:
         - bool: True if save successful, False otherwise
         '''
@@ -120,10 +120,7 @@ class DataSplitter:
         for varname,da in ds.data_vars.items():
             chunks = []
             for dim,size in zip(da.dims,da.shape):
-                if dim=='time':
-                    chunks.append(min(timechunksize,size))
-                else:
-                    chunks.append(size)
+                chunks.append(min(timechunksize,size) if dim=='time' else size)
             encoding[varname] = {'chunksizes':tuple(chunks),'dtype':da.dtype}
         try:
             ds.to_netcdf(filepath,engine='h5netcdf',encoding=encoding)

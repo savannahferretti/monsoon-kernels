@@ -181,13 +181,10 @@ class DataDownloader:
         logger.info(f'   Attempting to save {filename}...')
         ds.load()
         ds[shortname].encoding = {}
-        encodingchunks = []
+        chunks = []
         for dim,size in zip(ds[shortname].dims,ds[shortname].shape):
-            if dim=='time':
-                encodingchunks.append(min(timechunksize,size))
-            else:
-                encodingchunks.append(size)
-        encoding = {shortname:{'chunksizes':tuple(encodingchunks)}}
+            chunks.append(min(timechunksize,size) if dim=='time' else size)
+        encoding = {shortname:{'chunksizes':tuple(chunks)}}
         try:
             ds.to_netcdf(filepath,engine='h5netcdf',encoding=encoding)
             xr.open_dataset(filepath,engine='h5netcdf').close()

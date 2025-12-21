@@ -31,7 +31,8 @@ class DataCalculator:
 
     def retrieve(self,longname):
         '''
-        Purpose: Lazily import in a NetCDF file as an xr.DataArray with ascending pressure levels, if applicable (e.g., [500,550,600,...] hPa).
+        Purpose: Lazily import in a NetCDF file as an xr.DataArray with ascending pressure levels, if applicable 
+        (e.g., [500,550,600,...] hPa).
         Args:
         - longname (str): variable description
         Returns:
@@ -59,7 +60,8 @@ class DataCalculator:
 
     def resample(self,da):
         '''
-        Purpose: Compute a centered hourly mean (uses the two half-hour samples that straddle each hour; falls back to one at boundaries).
+        Purpose: Compute a centered hourly mean (uses the two half-hour samples that straddle each hour; 
+        falls back to one at boundaries).
         Args:
         - da (xr.DataArray): input DataArray
         Returns:
@@ -71,7 +73,7 @@ class DataCalculator:
 
     def regrid(self,da):
         '''
-        Purpose: Regrid a DataArray to 1.0° × 1.0° grid extending 1 grid cell beyond the target domain.
+        Purpose: Regrid a DataArray to 1.0° × 1.0° grid extending one grid cell beyond the target domain.
         Args:
         - da (xr.DataArray): input DataArray with radius (for better interpolation)
         Returns:
@@ -86,7 +88,8 @@ class DataCalculator:
 
     def calc_es(self,t):
         '''
-        Purpose: Calculate saturation vapor pressure (eₛ) using Eqs. 17 and 18 from Huang J. (2018), J. Appl. Meteorol. Climatol.
+        Purpose: Calculate saturation vapor pressure (eₛ) using Eqs. 17 and 18 from Huang J. (2018), J. Appl. 
+        Meteorol. Climatol.
         Args:
         - t (xr.DataArray): temperature DataArray (K)
         Returns:
@@ -100,7 +103,8 @@ class DataCalculator:
 
     def calc_qs(self,p,t):
         '''
-        Purpose: Calculate saturation specific humidity (qₛ) using Eq. 4 from Miller SFK. (2018), Atmos. Humidity Eq. Plymouth State Wea. Ctr.
+        Purpose: Calculate saturation specific humidity (qₛ) using Eq. 4 from Miller SFK. (2018), Atmos. 
+        Humidity Eq. Plymouth State Wea. Ctr.
         Args:
         - p (xr.DataArray): pressure DataArray (hPa)
         - t (xr.DataArray): temperature DataArray (K)
@@ -131,7 +135,8 @@ class DataCalculator:
 
     def calc_thetae(self,p,t,q=None):
         '''
-        Purpose: Calculate (unsaturated or saturated) equivalent potential temperature (θₑ) using Eqs. 43 and 55 from Bolton D. (1980), Mon. Wea. Rev.     
+        Purpose: Calculate (unsaturated or saturated) equivalent potential temperature (θₑ) using Eqs. 43 and 55 
+        from Bolton D. (1980), Mon. Wea. Rev.     
         Args:
         - p (xr.DataArray): pressure DataArray (hPa)
         - t (xr.DataArray): temperature DataArray (K)
@@ -153,38 +158,25 @@ class DataCalculator:
 
     def calc_quadrature_weights(self,refda,rearth=6.371e6):
         '''
-        Purpose: Compute separable quadrature components for a 4D grid (ΔA, Δp, and Δt).
+        Purpose: Compute separable quadrature weights for numerical integration over a 4D grid. For each dimension 
+        ('lat', 'lon', 'lev', 'time'), centered finite differences estimate the spacing between adjacent grid points. 
+        These spacings are combined into area weights ΔA (m²) accounting for spherical geometry, vertical thickness 
+        weights Δp (hPa) for pressure levels, and temporal weights Δt (s) for constant-cadence time steps.
         Args:
-        - refda (xr.DataArray): reference DataArray with dimension 'lat', 'lon', 'lev', and 'time'
-        - rearth (float): Earth's radius (defaults to 6,371,000 m)
+        - refda (xr.DataArray): reference DataArray with dimensions 'lat', 'lon', 'lev', and 'time'
+        - rearth (float): Earth's radius in meters (defaults to 6,371,000 m)
         Returns:
-        - tuple(xr.DataArray,xr.DataArray,xr.DataArray): DataArrays of weights for ΔA (m²), Δp (hPa), and Δt (s)
+        - tuple(xr.DataArray, xr.DataArray, xr.DataArray): quadrature weights for ΔA (m²), Δp (hPa), and Δt (s)
         '''
-        dims  = ('lat','lon','lev','time')
-        refda = refda.transpose(*dims)
-        lats  = refda.lat.values
-        lons  = refda.lon.values
+        lats  = np.deg2rad(refda.lat.values)
+        lons  = np.deg2rad(refda.lon.values)
         levs  = refda.lev.values
         times = refda.time.values
-        def spacing(coord):
-            '''
-            Purpose: Estimate spacing between grid points of a single dimension using centered differences.
-            Args:
-            - coord (np.ndarray): 1D NumPy array of monotonically increasing coordinates
-            Returns:
-            - np.ndarray: spacing between grid points
-            '''
-            coord = np.asarray(coord,dtype=np.float64)
-            delta = np.empty_like(coord)
-            delta[1:-1]   = 0.5*(coord[2:]-coord[:-2])
-            delta[[0,-1]] = (coord[1]-coord[0],coord[-1]-coord[-2])
-            return np.abs(delta)
-        dlat  = spacing(np.deg2rad(lats))
-        dlon  = spacing(np.deg2rad(lons))
-        dareavalues = ((rearth**2)*np.cos(np.deg2rad(lats))*dlat).reshape(lats.size,1)*dlon.reshape(1,lons.size)
-        dlevvalues  = spacing(levs)
-        dtimescalar = float(np.nanmedian((np.diff(times)/np.timedelta64(1,'s')).astype(np.float64)))
-        dtimevalues = np.full(times.size,dtimescalar)
+        dlat  = np.abs(np.concatenate([[lats[1]-lats[0]],0.5*(lats[2:]-lats[:-2]),[lats[-1]-lats[-2]]]))
+        dlon  = np.abs(np.concatenate([[lons[1]-lons[0]],0.5*(lons[2:]-lons[:-2]),[lons[-1]-lons[-2]]]))
+        dareavalues = (rearth**2*np.cos(lats)*dlat)[:,None]*dlon[None,:]
+        dlevvalues  = np.abs(np.concatenate([[levs[1]-levs[0]],0.5*(levs[2:]-levs[:-2]),[levs[-1]-levs[-2]]]))
+        dtimevalues = np.full(times.size,float(np.median(np.diff(times).astype('timedelta64[s]').astype(float))))
         darea = xr.DataArray(dareavalues.astype(np.float32),dims=('lat','lon'),coords={'lat':refda.lat,'lon':refda.lon})
         dlev  = xr.DataArray(dlevvalues.astype(np.float32),dims=('lev',),coords={'lev':refda.lev})
         dtime = xr.DataArray(dtimevalues.astype(np.float32),dims=('time',),coords={'time':refda.time})
@@ -233,13 +225,10 @@ class DataCalculator:
         logger.info(f'   Attempting to save {filename}...')
         ds.load()
         ds[shortname].encoding = {}
-        encodingchunks = []
+        chunks = []
         for dim,size in zip(ds[shortname].dims,ds[shortname].shape):
-            if dim=='time':
-                encodingchunks.append(min(timechunksize,size))
-            else:
-                encodingchunks.append(size)
-        encoding = {shortname:{'chunksizes':tuple(encodingchunks)}}
+            chunks.append(min(timechunksize,size) if dim=='time' else size)
+        encoding = {shortname:{'chunksizes':tuple(chunks)}}
         try:
             ds.to_netcdf(filepath,engine='h5netcdf',encoding=encoding)
             xr.open_dataset(filepath,engine='h5netcdf').close()
