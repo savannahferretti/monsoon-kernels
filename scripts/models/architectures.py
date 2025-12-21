@@ -99,7 +99,6 @@ class KernelNN(torch.nn.Module):
             preserved_size *= plevs
         if 'time' not in self.kerneldims:
             preserved_size *= ptimes
-
         nfeatures = self.nfieldvars * self.nkernels * preserved_size
         if self.uselocal:
             nfeatures += self.nlocalvars

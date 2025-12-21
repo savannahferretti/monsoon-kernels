@@ -25,7 +25,7 @@ class ModelFactory:
         elif kind=='nonparametric':
             nkernels   = modelconfig['nkernels']
             kerneldims = modelconfig['kerneldims']
-            intkernel  = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims)
+            intkernel  = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims,patchshape)
             model = KernelNN(intkernel,nlocalvars,uselocal,patchshape)
         elif kind=='parametric':
             nkernels   = modelconfig['nkernels']
