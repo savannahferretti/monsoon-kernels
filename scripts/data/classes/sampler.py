@@ -76,6 +76,18 @@ class PatchDataset(torch.utils.data.Dataset):
         '''
         return self.centers[idx]
 
+    def shape(self):
+        '''
+        Purpose: Return patch shape dimensions.
+        Returns:
+        - tuple[int,int,int,int]: (plats, plons, plevs, ptimes)
+        '''
+        plats = 2*self.radius + 1
+        plons = 2*self.radius + 1
+        plevs = self.maxlevs
+        ptimes = self.timelag + 1 if self.timelag > 0 else 1
+        return (plats,plons,plevs,ptimes)
+
     @staticmethod
     def collate(batch,dataset):
         '''
@@ -203,6 +215,7 @@ class PatchDataLoader:
             kwargs['prefetch_factor'] = 4
         datasets = {}
         loaders  = {}
+        centers  = {}
         for split,data in splitdata.items():
             datasets[split] = PatchDataset(
                 patchconfig['radius'],
@@ -224,4 +237,6 @@ class PatchDataLoader:
                 batch_size=batchsize,
                 shuffle=(split=='train'),
                 collate_fn=lambda batch,ds=datasets[split]:PatchDataset.collate(batch,ds),**kwargs)
-        return {'datasets':datasets,'loaders':loaders}
+            centers[split] = datasets[split].centers
+        geometry = next(iter(datasets.values()))
+        return {'datasets':datasets,'loaders':loaders,'centers':centers,'geometry':geometry}
