@@ -205,7 +205,7 @@ if __name__=='__main__':
 
         if info['havekernel']:
             logger.info('   Formatting/saving normalized kernel weights...')
-            refds = ds = xr.open_dataset('/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits/valid.h5',engine='h5netcdf')
+            refds = ds = xr.open_dataset(os.path.join(SPLITDIR,'valid.h5'),engine='h5netcdf')
             arr,meta = out.to_array(
                 info['weights'],'weights',
                 kerneldims=info['kerneldims'],

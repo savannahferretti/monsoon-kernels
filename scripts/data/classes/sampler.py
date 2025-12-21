@@ -54,7 +54,7 @@ class PatchDataset(torch.utils.data.Dataset):
         lats = torch.as_tensor(lats,dtype=torch.float32)
         lons = torch.as_tensor(lons,dtype=torch.float32)
         patchfits = ((latidxs>=self.radius)&(latidxs<nlats-self.radius)&(lonidxs>=self.radius)&(lonidxs<nlons-self.radius))
-        indomain  = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons_t[lonidxs]<=lonrange[1]))
+        indomain  = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons[lonidxs]<=lonrange[1]))
         valid = patchfits&indomain
         self.centers = list(zip(latidxs[valid].tolist(),lonidxs[valid].tolist(),timeidxs[valid].tolist()))
 
@@ -75,6 +75,18 @@ class PatchDataset(torch.utils.data.Dataset):
         - tuple[int,int,int]: (latidx, lonidx, timeidx) patch center
         '''
         return self.centers[idx]
+
+    def shape(self):
+        '''
+        Purpose: Return patch shape dimensions.
+        Returns:
+        - tuple[int,int,int,int]: (plats, plons, plevs, ptimes)
+        '''
+        plats = 2*self.radius + 1
+        plons = 2*self.radius + 1
+        plevs = self.maxlevs
+        ptimes = self.timelag + 1 if self.timelag > 0 else 1
+        return (plats,plons,plevs,ptimes)
 
     @staticmethod
     def collate(batch,dataset):
@@ -203,6 +215,7 @@ class PatchDataLoader:
             kwargs['prefetch_factor'] = 4
         datasets = {}
         loaders  = {}
+        centers  = {}
         for split,data in splitdata.items():
             datasets[split] = PatchDataset(
                 patchconfig['radius'],
@@ -212,7 +225,7 @@ class PatchDataLoader:
                 data['darea'],
                 data['dlev'],
                 data['dtime'],
-                data['local']
+                data['local'],
                 data['target'],
                 uselocal,
                 data['lats'],
@@ -224,4 +237,6 @@ class PatchDataLoader:
                 batch_size=batchsize,
                 shuffle=(split=='train'),
                 collate_fn=lambda batch,ds=datasets[split]:PatchDataset.collate(batch,ds),**kwargs)
-        return {'datasets':datasets,'loaders':loaders}
+            centers[split] = datasets[split].centers
+        geometry = next(iter(datasets.values()))
+        return {'datasets':datasets,'loaders':loaders,'centers':centers,'geometry':geometry}
