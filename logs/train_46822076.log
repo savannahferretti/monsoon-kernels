@@ -1,0 +1,14 @@
+Training model: nonparametric_vertical
+Traceback (most recent call last):
+  File "/global/homes/s/sferrett/.conda/envs/monsoon-kernels/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/global/homes/s/sferrett/.conda/envs/monsoon-kernels/lib/python3.9/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/scripts/models/train.py", line 8, in <module>
+    from scripts.data.classes import PatchDataLoader
+  File "/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/scripts/data/classes/__init__.py", line 6, in <module>
+    from scripts.data.classes.sampler import PatchDataset,PatchDataLoader
+  File "/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/scripts/data/classes/sampler.py", line 216
+    data['target'],
+    ^
+SyntaxError: invalid syntax

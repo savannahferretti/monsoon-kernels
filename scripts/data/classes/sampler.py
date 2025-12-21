@@ -54,7 +54,7 @@ class PatchDataset(torch.utils.data.Dataset):
         lats = torch.as_tensor(lats,dtype=torch.float32)
         lons = torch.as_tensor(lons,dtype=torch.float32)
         patchfits = ((latidxs>=self.radius)&(latidxs<nlats-self.radius)&(lonidxs>=self.radius)&(lonidxs<nlons-self.radius))
-        indomain  = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons_t[lonidxs]<=lonrange[1]))
+        indomain  = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons[lonidxs]<=lonrange[1]))
         valid = patchfits&indomain
         self.centers = list(zip(latidxs[valid].tolist(),lonidxs[valid].tolist(),timeidxs[valid].tolist()))
 
@@ -212,7 +212,7 @@ class PatchDataLoader:
                 data['darea'],
                 data['dlev'],
                 data['dtime'],
-                data['local']
+                data['local'],
                 data['target'],
                 uselocal,
                 data['lats'],
