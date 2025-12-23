@@ -6,16 +6,16 @@ import numpy as np
 class KernelModule:
 
     @staticmethod
-    def normalize(kernel,dareapatch,dlevpatch,dtimepatch,kerneldims,epsilon=1e-4):
+    def normalize(kernel,dareapatch,dlevpatch,dtimepatch,kerneldims,epsilon=1e-6):
         '''
-        Purpose: Normalize a kernel so it integrates to ~1 over its active dimensions.
+        Purpose: Normalize a kernel so the raw weights sum to 1 (without quadrature).
         Args:
         - kernel (torch.Tensor): unnormalized kernel with shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
-        - dareapatch (torch.Tensor): horizontal area weights patch with shape (plats, plons)
-        - dlevpatch (torch.Tensor): vertical thickness weights patch with shape (plevs,)
-        - dtimepatch (torch.Tensor): time step weights patch with shape (ptimes,)
+        - dareapatch (torch.Tensor): horizontal area weights patch (not used, kept for API compatibility)
+        - dlevpatch (torch.Tensor): vertical thickness weights patch (not used, kept for API compatibility)
+        - dtimepatch (torch.Tensor): time step weights patch (not used, kept for API compatibility)
         - kerneldims (tuple[str] | list[str]): dimensions the kernel varies along
-        - epsilon (float): stabilizer to avoid divide-by-zero (defaults to 1e-4)
+        - epsilon (float): stabilizer to avoid divide-by-zero (defaults to 1e-6)
         Returns:
         - torch.Tensor: normalized kernel weights with same shape as kernel
         '''
@@ -23,23 +23,37 @@ class KernelModule:
         plats,plons = dareapatch.shape
         plevs       = dlevpatch.numel()
         ptimes      = dtimepatch.numel()
-        norm = torch.ones((plats,plons,plevs,ptimes),dtype=dareapatch.dtype,device=dareapatch.device)
-        if ('lat' in kerneldims) or ('lon' in kerneldims):
-            norm = norm*dareapatch[:,:,None,None]
-        if 'lev' in kerneldims:
-            norm = norm*dlevpatch[None,None,:,None]
-        if 'time' in kerneldims:
-            norm = norm*dtimepatch[None,None,None,:]
-        integral = torch.einsum('fkyxpt,yxpt->fk',kernel,norm)+epsilon
+
+        # Sum kernel weights along spatial/temporal dimensions (no quadrature)
+        kernelsum = kernel.sum(dim=(2,3,4,5))
+
+        # Average over dimensions not in kerneldims (since kernel is constant along those dims)
         if 'lat' not in kerneldims:
-            integral = integral/plats
+            kernelsum = kernelsum/plats
         if 'lon' not in kerneldims:
-            integral = integral/plons
+            kernelsum = kernelsum/plons
         if 'lev' not in kerneldims:
-            integral = integral/plevs
+            kernelsum = kernelsum/plevs
         if 'time' not in kerneldims:
-            integral = integral/ptimes
-        weights = kernel/integral[:,:,None,None,None,None]
+            kernelsum = kernelsum/ptimes
+
+        # Normalize so kernel weights sum to 1
+        weights = kernel/(kernelsum[:,:,None,None,None,None]+epsilon)
+
+        # Sanity check: verify normalized kernel sums to 1
+        checksum = weights.sum(dim=(2,3,4,5))
+        if 'lat' not in kerneldims:
+            checksum = checksum/plats
+        if 'lon' not in kerneldims:
+            checksum = checksum/plons
+        if 'lev' not in kerneldims:
+            checksum = checksum/plevs
+        if 'time' not in kerneldims:
+            checksum = checksum/ptimes
+
+        assert torch.allclose(checksum, torch.ones_like(checksum), atol=1e-4), \
+            f"Kernel normalization failed: weights sum to {checksum.mean().item():.6f} instead of 1.0"
+
         return weights
 
     @staticmethod
