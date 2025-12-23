@@ -104,14 +104,12 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
 def inference(model,split,result,uselocal,device):
     '''
     Purpose: Run inference for predictions, and if present, also collect kernel-integrated features and normalized weights.
-    
     Notes:
     - Predictions are the forward pass outputs.
     - Features are pulled from model.intkernel.features after each forward pass.
     - Normalized weights are pulled from model.intkernel.weights (captured once after first forward pass).
-    
     Args:
-    - model (torch.nn.Module): trained model instance 
+    - model (torch.nn.Module): trained model instance
     - split (str): 'train' | 'valid' | 'test'
     - result (dict[str,object]): dictionary from PatchDataLoader.dataloaders()
     - uselocal (bool): whether to use local inputs
@@ -121,37 +119,37 @@ def inference(model,split,result,uselocal,device):
     '''
     dataloader = result['loaders'][split]
     havekernel = hasattr(model,'intkernel')
-    nonparam   = bool(havekernel and ('nonparametric' in model.intkernel.__class__.__name__.lower()))
-    nkernels   = int(getattr(model,'nkernels',1)) if havekernel else 1
+    nonparam = bool(havekernel and ('nonparametric' in model.intkernel.__class__.__name__.lower()))
+    nkernels = int(getattr(model,'nkernels',1)) if havekernel else 1
     kerneldims = tuple(getattr(model,'kerneldims',())) if havekernel else tuple()
-
     model.eval()
-    predslist  = []
-    weights    = None
-
+    predslist = []
+    featslist = []
+    weights = None
     with torch.no_grad():
         for batch in dataloader:
-            fieldpatch  = batch['fieldpatch'].to(device)
+            fieldpatch = batch['fieldpatch'].to(device)
             localvalues = batch['localvalues'].to(device) if (uselocal and 'localvalues' in batch) else None
             if havekernel:
                 dareapatch = batch['dareapatch'].to(device)
-                dlevpatch  = batch['dlevpatch'].to(device)
+                dlevpatch = batch['dlevpatch'].to(device)
                 dtimepatch = batch['dtimepatch'].to(device)
                 outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
                 if weights is None:
                     if model.intkernel.weights is None:
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
                     weights = model.intkernel.weights.detach().cpu().numpy()
+                if model.intkernel.features is not None:
+                    featslist.append(model.intkernel.features.detach().cpu().numpy())
             else:
                 outputvalues = model(fieldpatch,localvalues)
-
             predslist.append(outputvalues.detach().cpu().numpy())
-
     preds = np.concatenate(predslist,axis=0).astype(np.float32)
+    feats = np.concatenate(featslist,axis=0).astype(np.float32) if featslist else None
     weights = weights.astype(np.float32) if weights is not None else None
-
     return {
         'predictions':preds,
+        'features':feats,
         'weights':weights,
         'havekernel':havekernel,
         'nonparam':nonparam,
@@ -192,25 +190,34 @@ if __name__=='__main__':
         if model is None:
             continue
 
-        info    = inference(model,split,result,uselocal,device)
+        info = inference(model,split,result,uselocal,device)
         centers = result['centers'][split]
-        refda   = splitdata[split]['refda']
-
+        refda = splitdata[split]['refda']
+        patchshape = result['geometry'].shape()
         logger.info('   Formatting/saving predictions...')
         arr,meta = out.to_array(info['predictions'],'predictions',
             centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
         ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
         out.save(name,ds,'predictions',split,PREDSDIR)
         del arr,meta,ds
-
         if info['havekernel']:
             logger.info('   Formatting/saving normalized kernel weights...')
-            refds = ds = xr.open_dataset(os.path.join(SPLITDIR,'valid.h5'),engine='h5netcdf')
+            refds = xr.open_dataset(os.path.join(SPLITDIR,'valid.h5'),engine='h5netcdf')
             arr,meta = out.to_array(
                 info['weights'],'weights',
                 kerneldims=info['kerneldims'],
                 nonparam=info['nonparam'])
             ds = out.to_dataset(arr,meta,refds=refds)
             out.save(name,ds,'weights',split,WEIGHTSDIR)
-
+            del arr,meta,ds
+            if info['features'] is not None:
+                logger.info('   Formatting/saving kernel-integrated features...')
+                arr,meta = out.to_array(
+                    info['features'],'features',
+                    centers=centers,refda=refda,nkernels=info['nkernels'],
+                    kerneldims=info['kerneldims'],patchshape=patchshape,
+                    nonparam=info['nonparam'])
+                ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
+                out.save(name,ds,'features',split,FEATSDIR)
+                del arr,meta,ds
         del model

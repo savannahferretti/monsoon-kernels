@@ -7,7 +7,7 @@ import xarray as xr
 
 class PatchDataset(torch.utils.data.Dataset):
 
-    def __init__(self,radius,maxlevs,timelag,field,darea,dlev,dtime,local,target,uselocal,lats,lons,latrange,lonrange):
+    def __init__(self,radius,maxlevs,timelag,field,darea,dlev,dtime,ps,lev,local,target,uselocal,lats,lons,latrange,lonrange):
         '''
         Purpose: Initialize dataset for extracting spatial-temporal patches from climate data.
         Args:
@@ -18,6 +18,8 @@ class PatchDataset(torch.utils.data.Dataset):
         - darea (torch.Tensor): horizontal area weights with shape (nlats, nlons)
         - dlev (torch.Tensor): vertical thickness weights with shape (nlevs,)
         - dtime (torch.Tensor): time step weights with shape (ntimes,)
+        - ps (torch.Tensor): surface pressure with shape (nlats, nlons, ntimes)
+        - lev (torch.Tensor): pressure levels with shape (nlevs,)
         - local (torch.Tensor | None): local inputs with shape (nlocalvars, nlats, nlons, ntimes) or None
         - target (torch.Tensor): target values with shape (nlats, nlons, ntimes)
         - uselocal (bool): whether to use local inputs
@@ -35,26 +37,32 @@ class PatchDataset(torch.utils.data.Dataset):
             raise ValueError('`dlev` must have shape (nlevs,)')
         if dtime.ndim!=1:
             raise ValueError('`dtime` must have shape (ntimes,)')
+        if ps.ndim!=3:
+            raise ValueError('`ps` must have shape (nlats, nlons, ntimes)')
+        if lev.ndim!=1:
+            raise ValueError('`lev` must have shape (nlevs,)')
         if local is not None and local.ndim!=4:
             raise ValueError('`local` must have shape (nlocalvars, nlats, nlons, ntimes) or be None')
         if target.ndim!=3:
             raise ValueError('`target` must have shape (nlats, nlons, ntimes)')
-        self.radius  = int(radius)
+        self.radius = int(radius)
         self.maxlevs = int(maxlevs)
         self.timelag = int(timelag)
-        self.field   = field
-        self.darea   = darea
-        self.dlev    = dlev
-        self.dtime   = dtime
-        self.local   = local
-        self.target  = target
+        self.field = field
+        self.darea = darea
+        self.dlev = dlev
+        self.dtime = dtime
+        self.ps = ps
+        self.lev = lev
+        self.local = local
+        self.target = target
         self.uselocal = bool(uselocal)
         nlats,nlons,ntimes = target.shape
         latidxs,lonidxs,timeidxs = torch.nonzero(torch.isfinite(target),as_tuple=True)
         lats = torch.as_tensor(lats,dtype=torch.float32)
         lons = torch.as_tensor(lons,dtype=torch.float32)
         patchfits = ((latidxs>=self.radius)&(latidxs<nlats-self.radius)&(lonidxs>=self.radius)&(lonidxs<nlons-self.radius))
-        indomain  = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons[lonidxs]<=lonrange[1]))
+        indomain = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons[lonidxs]<=lonrange[1]))
         valid = patchfits&indomain
         self.centers = list(zip(latidxs[valid].tolist(),lonidxs[valid].tolist(),timeidxs[valid].tolist()))
 
@@ -91,54 +99,61 @@ class PatchDataset(torch.utils.data.Dataset):
     @staticmethod
     def collate(batch,dataset):
         '''
-        Purpose: Vectorized batch patch extraction from dataset.
+        Purpose: Vectorized batch patch extraction from dataset with below-surface masking.
         Args:
         - batch (list[tuple[int,int,int]]): list of (latidx, lonidx, timeidx) centers
         - dataset (PatchDataset): dataset instance
         Returns:
         - dict[str,torch.Tensor]: dictionary with fieldpatch, dareapatch, dlevpatch, dtimepatch, targetvalues, and optionally localvalues
         '''
-        latidx  = torch.tensor([b[0] for b in batch],dtype=torch.long)
-        lonidx  = torch.tensor([b[1] for b in batch],dtype=torch.long)
+        latidx = torch.tensor([b[0] for b in batch],dtype=torch.long)
+        lonidx = torch.tensor([b[1] for b in batch],dtype=torch.long)
         timeidx = torch.tensor([b[2] for b in batch],dtype=torch.long)
-        radius   = dataset.radius
-        maxlevs  = dataset.maxlevs
-        timelag  = dataset.timelag
-        lat_off = torch.arange(-radius,radius+1,dtype=torch.long)
-        lon_off = torch.arange(-radius,radius+1,dtype=torch.long)
-        lat_grid = latidx[:,None]+lat_off[None,:]
-        lon_grid = lonidx[:,None]+lon_off[None,:]
-        lev_idx = torch.arange(maxlevs,dtype=torch.long)
+        radius = dataset.radius
+        maxlevs = dataset.maxlevs
+        timelag = dataset.timelag
+        latoff = torch.arange(-radius,radius+1,dtype=torch.long)
+        lonoff = torch.arange(-radius,radius+1,dtype=torch.long)
+        latgrid = latidx[:,None]+latoff[None,:]
+        longrid = lonidx[:,None]+lonoff[None,:]
+        levidx = torch.arange(maxlevs,dtype=torch.long)
         if timelag>0:
-            time_off = torch.arange(-timelag,1,dtype=torch.long)
-            time_grid = timeidx[:,None]+time_off[None,:]
-            tmask = time_grid<0
-            time_grid_clamped = time_grid.clamp(min=0)
+            timeoff = torch.arange(-timelag,1,dtype=torch.long)
+            timegrid = timeidx[:,None]+timeoff[None,:]
+            tmask = timegrid<0
+            timegridclamped = timegrid.clamp(min=0)
         else:
-            time_grid_clamped = timeidx[:,None]
+            timegridclamped = timeidx[:,None]
             tmask = None
         field = dataset.field
         nfieldvars = field.shape[0]
-        plats  = lat_grid.shape[1]
-        plons  = lon_grid.shape[1]
-        plevs  = lev_idx.shape[0]
-        ptimes = time_grid_clamped.shape[1]
-        lat_ix = lat_grid[:,:,None].expand(-1,-1,plons)
-        lon_ix = lon_grid[:,None,:].expand(-1,plats,-1)
-        lat_ix6 = lat_ix[:,None,:,:,None,None]
-        lon_ix6 = lon_ix[:,None,:,:,None,None]
-        lev_ix6 = lev_idx[None,None,None,None,:,None]
-        tim_ix6 = time_grid_clamped[:,None,None,None,None,:]
-        fieldpatch = field[:,lat_ix6.squeeze(1),lon_ix6.squeeze(1),lev_ix6.squeeze(0).squeeze(0),tim_ix6.squeeze(1)]
+        plats = latgrid.shape[1]
+        plons = longrid.shape[1]
+        plevs = levidx.shape[0]
+        ptimes = timegridclamped.shape[1]
+        latix = latgrid[:,:,None].expand(-1,-1,plons)
+        lonix = longrid[:,None,:].expand(-1,plats,-1)
+        latix6 = latix[:,None,:,:,None,None]
+        lonix6 = lonix[:,None,:,:,None,None]
+        levix6 = levidx[None,None,None,None,:,None]
+        timix6 = timegridclamped[:,None,None,None,None,:]
+        fieldpatch = field[:,latix6.squeeze(1),lonix6.squeeze(1),levix6.squeeze(0).squeeze(0),timix6.squeeze(1)]
         fieldpatch = fieldpatch.permute(1,0,2,3,4,5).contiguous()
         if timelag>0 and tmask is not None and tmask.any():
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
+        ps = dataset.ps
+        lev = dataset.lev
+        pspatch = ps[latix,lonix,timegridclamped[:,None,None,:]]
+        levgrid = lev[levidx][None,None,None,:,None]
+        belowsurface = levgrid>pspatch[:,:,:,None,:]
+        belowsurface = belowsurface[:,None,:,:,:,:].expand(-1,nfieldvars,-1,-1,-1,-1)
+        fieldpatch = fieldpatch.masked_fill(belowsurface,float('nan'))
         darea = dataset.darea
-        dareapatch = darea[lat_ix,lon_ix].contiguous()
-        dlevpatch = dataset.dlev[lev_idx][None,:].expand(latidx.shape[0],-1).contiguous()
+        dareapatch = darea[latix,lonix].contiguous()
+        dlevpatch = dataset.dlev[levidx][None,:].expand(latidx.shape[0],-1).contiguous()
         dtime = dataset.dtime
-        dtimepatch = dtime[time_grid_clamped].contiguous()
+        dtimepatch = dtime[timegridclamped].contiguous()
         if timelag>0 and tmask is not None and tmask.any():
             dtimepatch = dtimepatch.masked_fill(tmask,0)
         targetvalues = dataset.target[latidx,lonidx,timeidx].contiguous()
@@ -180,8 +195,10 @@ class PatchDataLoader:
                 for varname in localvars],axis=0))) if localvars else None
             target = torch.from_numpy(ds[targetvar].values)
             darea = torch.from_numpy(ds['darea'].values)
-            dlev  = torch.from_numpy(ds['dlev'].values)
+            dlev = torch.from_numpy(ds['dlev'].values)
             dtime = torch.from_numpy(ds['dtime'].values)
+            ps = torch.from_numpy(ds['ps'].values)
+            lev = torch.from_numpy(ds.lev.values)
             result[split] = {
                 'refda':ds[targetvar],
                 'field':field,
@@ -190,6 +207,8 @@ class PatchDataLoader:
                 'darea':darea,
                 'dlev':dlev,
                 'dtime':dtime,
+                'ps':ps,
+                'lev':lev,
                 'lats':ds.lat.values,
                 'lons':ds.lon.values}
         return result
@@ -214,8 +233,8 @@ class PatchDataLoader:
         if workers>0:
             kwargs['prefetch_factor'] = 4
         datasets = {}
-        loaders  = {}
-        centers  = {}
+        loaders = {}
+        centers = {}
         for split,data in splitdata.items():
             datasets[split] = PatchDataset(
                 patchconfig['radius'],
@@ -225,6 +244,8 @@ class PatchDataLoader:
                 data['darea'],
                 data['dlev'],
                 data['dtime'],
+                data['ps'],
+                data['lev'],
                 data['local'],
                 data['target'],
                 uselocal,

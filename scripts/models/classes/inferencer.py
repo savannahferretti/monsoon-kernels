@@ -67,9 +67,9 @@ class Inferencer:
                 dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
                 dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
                 dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
-                _ = self.model.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)  
-                featureten = self.model.intkernel.features                              
-                features.append(featureten.cpu().numpy())
+                _ = self.model.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
+                featuretensor = self.model.intkernel.features
+                features.append(featuretensor.cpu().numpy())
         return np.concatenate(features,axis=0)
 
     def extract_weights(self):
