@@ -90,16 +90,16 @@ class KernelNN(torch.nn.Module):
         self.kerneldims  = tuple(intkernel.kerneldims)
 
         plats, plons, plevs, ptimes = patchshape
-        preserved_size = 1
+        preservedsize = 1
         if 'lat' not in self.kerneldims:
-            preserved_size *= plats
+            preservedsize *= plats
         if 'lon' not in self.kerneldims:
-            preserved_size *= plons
+            preservedsize *= plons
         if 'lev' not in self.kerneldims:
-            preserved_size *= plevs
+            preservedsize *= plevs
         if 'time' not in self.kerneldims:
-            preserved_size *= ptimes
-        nfeatures = self.nfieldvars * self.nkernels * preserved_size
+            preservedsize *= ptimes
+        nfeatures = self.nfieldvars * self.nkernels * preservedsize
         if self.uselocal:
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
@@ -117,7 +117,6 @@ class KernelNN(torch.nn.Module):
         - torch.Tensor: predictions with shape (nbatch,)
         '''
         features = self.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
-
         if self.uselocal:
             if localvalues is None:
                 raise ValueError('`localvalues` must be provided when `uselocal` is True')

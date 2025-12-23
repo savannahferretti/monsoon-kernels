@@ -17,7 +17,7 @@ class PredictionWriter:
         '''
         self.fieldvars = list(fieldvars)
 
-    def to_array(self,data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,nonparam=False):
+    def to_array(self,data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,patchshape=None,nonparam=False):
         '''
         Purpose: Put raw outputs (predictions/features/weights) into the right dense ndarray shape.
         Args:
@@ -26,7 +26,8 @@ class PredictionWriter:
         - centers (list[tuple[int,int,int]] | None): list of (latidx, lonidx, timeidx) patch centers (preds/features)
         - refda (xr.DataArray | None): reference DataArray with target grid (preds/features)
         - nkernels (int | None): number of kernels (preds/features)
-        - kerneldims (list[str] | tuple[str] | None): dims the kernel varies along (weights)
+        - kerneldims (list[str] | tuple[str] | None): dims the kernel varies along (weights/features)
+        - patchshape (tuple[int,int,int,int] | None): patch shape as (plats, plons, plevs, ptimes) (features)
         - nonparam (bool): whether kernel is non-parametric
         Returns:
         - tuple[np.ndarray,dict]: (arr, meta) where meta is used by to_dataset()
