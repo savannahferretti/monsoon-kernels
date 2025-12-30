@@ -116,17 +116,37 @@ class PatchDataset(torch.utils.data.Dataset):
         lonoff = torch.arange(-radius,radius+1,dtype=torch.long)
         latgrid = latidx[:,None]+latoff[None,:]
         longrid = lonidx[:,None]+lonoff[None,:]
+        plats = latgrid.shape[1]
+        plons = longrid.shape[1]
 
-        # Dynamically select lowest valid levels based on center point surface pressure
+        # Dynamically select lowest valid levels based on minimum surface pressure across entire patch
+        # This ensures all selected levels are valid at ALL spatial points in the patch
         ps = dataset.ps
         lev = dataset.lev
-        pscenter = ps[latidx,lonidx,timeidx]  # (nbatch,)
         nlevstotal = lev.shape[0]
 
-        # For each sample, find lowest maxlevs valid levels
+        # First, get surface pressure for entire patch
+        latix = latgrid[:,:,None].expand(-1,-1,plons)
+        lonix = longrid[:,None,:].expand(-1,plats,-1)
+
+        if timelag>0:
+            timeoff = torch.arange(-timelag,1,dtype=torch.long)
+            timegrid = timeidx[:,None]+timeoff[None,:]
+            tmask = timegrid<0
+            timegridclamped = timegrid.clamp(min=0)
+        else:
+            timegridclamped = timeidx[:,None]
+            tmask = None
+
+        pspatch = ps[latix,lonix,timegridclamped[:,None,None,:]]  # (nbatch, plats, plons, ptimes)
+
+        # Use minimum surface pressure across patch (spatial + temporal) to select levels
+        psmin = pspatch.reshape(latidx.shape[0], -1).min(dim=1).values  # (nbatch,)
+
+        # For each sample, find lowest maxlevs valid levels based on minimum PS in patch
         levidx_list = []
         for i in range(latidx.shape[0]):
-            validmask = lev <= pscenter[i]
+            validmask = lev <= psmin[i]
             validindices = torch.where(validmask)[0]
             if len(validindices) >= maxlevs:
                 levidx_list.append(validindices[-maxlevs:])
@@ -142,22 +162,10 @@ class PatchDataset(torch.utils.data.Dataset):
                 # Pad with last valid index
                 levidx[i,len(indices):] = indices[-1] if len(indices) > 0 else 0
 
-        if timelag>0:
-            timeoff = torch.arange(-timelag,1,dtype=torch.long)
-            timegrid = timeidx[:,None]+timeoff[None,:]
-            tmask = timegrid<0
-            timegridclamped = timegrid.clamp(min=0)
-        else:
-            timegridclamped = timeidx[:,None]
-            tmask = None
         field = dataset.field
         nfieldvars = field.shape[0]
-        plats = latgrid.shape[1]
-        plons = longrid.shape[1]
         plevs = maxlevs
         ptimes = timegridclamped.shape[1]
-        latix = latgrid[:,:,None].expand(-1,-1,plons)
-        lonix = longrid[:,None,:].expand(-1,plats,-1)
 
         # Extract field data using per-sample level indices
         nbatch = latidx.shape[0]
@@ -170,14 +178,8 @@ class PatchDataset(torch.utils.data.Dataset):
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
 
-        # Apply per-point surface masking (some points in patch may have different ps)
-        pspatch = ps[latix,lonix,timegridclamped[:,None,None,:]]
-        for i in range(nbatch):
-            levgrid_i = lev[levidx[i]][None,None,None,:,None]  # (1, 1, 1, plevs, 1)
-            pspatch_i = pspatch[i:i+1,:,:,None,:]  # (1, plats, plons, 1, ptimes) - add level dim
-            belowsurface_i = levgrid_i > pspatch_i  # (1, plats, plons, plevs, ptimes)
-            belowsurface_i = belowsurface_i[:,None,:,:,:,:].expand(-1,nfieldvars,-1,-1,-1,-1)
-            fieldpatch[i:i+1] = fieldpatch[i:i+1].masked_fill(belowsurface_i,float('nan'))
+        # Note: No per-point surface masking needed because levels are selected based on
+        # minimum surface pressure across entire patch, guaranteeing all levels are valid everywhere
 
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
