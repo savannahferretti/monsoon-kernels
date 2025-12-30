@@ -1,10 +1,33 @@
 #!/usr/bin/env python
+
 import os
 import torch
 import numpy as np
 import xarray as xr
+
 class PatchDataset(torch.utils.data.Dataset):
+
     def __init__(self,radius,maxlevs,timelag,field,darea,dlev,dtime,ps,lev,local,target,uselocal,lats,lons,latrange,lonrange):
+        '''
+        Purpose: Initialize dataset for extracting spatial-temporal patches from climate data.
+        Args:
+        - radius (int): number of horizontal grid points on each side of center
+        - maxlevs (int): maximum number of vertical levels
+        - timelag (int): number of past time steps; if 0, use only current time
+        - field (torch.Tensor): predictor fields with shape (nfieldvars, nlats, nlons, nlevs, ntimes)
+        - darea (torch.Tensor): horizontal area weights with shape (nlats, nlons)
+        - dlev (torch.Tensor): vertical thickness weights with shape (nlevs,)
+        - dtime (torch.Tensor): time step weights with shape (ntimes,)
+        - ps (torch.Tensor): surface pressure with shape (nlats, nlons, ntimes)
+        - lev (torch.Tensor): pressure levels with shape (nlevs,)
+        - local (torch.Tensor | None): local inputs with shape (nlocalvars, nlats, nlons, ntimes) or None
+        - target (torch.Tensor): target values with shape (nlats, nlons, ntimes)
+        - uselocal (bool): whether to use local inputs
+        - lats (np.ndarray): latitude values with shape (nlats,)
+        - lons (np.ndarray): longitude values with shape (nlons,)
+        - latrange (tuple[float,float]): latitude range for valid patches
+        - lonrange (tuple[float,float]): longitude range for valid patches
+        '''
         super().__init__()
         if field.ndim!=5:
             raise ValueError('`field` must have shape (nfieldvars, nlats, nlons, nlevs, ntimes)')
@@ -42,18 +65,47 @@ class PatchDataset(torch.utils.data.Dataset):
         indomain = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons[lonidxs]<=lonrange[1]))
         valid = patchfits&indomain
         self.centers = list(zip(latidxs[valid].tolist(),lonidxs[valid].tolist(),timeidxs[valid].tolist()))
+
     def __len__(self):
+        '''
+        Purpose: Return number of valid patch centers.
+        Returns:
+        - int: number of centers
+        '''
         return len(self.centers)
+
     def __getitem__(self,idx):
+        '''
+        Purpose: Return patch center indices for batch extraction.
+        Args:
+        - idx (int): index into centers list
+        Returns:
+        - tuple[int,int,int]: (latidx, lonidx, timeidx) patch center
+        '''
         return self.centers[idx]
+
     def shape(self):
+        '''
+        Purpose: Return patch shape dimensions.
+        Returns:
+        - tuple[int,int,int,int]: (plats, plons, plevs, ptimes)
+        '''
         plats = 2*self.radius + 1
         plons = 2*self.radius + 1
         plevs = self.maxlevs
         ptimes = self.timelag + 1 if self.timelag > 0 else 1
         return (plats,plons,plevs,ptimes)
+
     @staticmethod
     def collate(batch,dataset):
+        '''
+        Purpose: Vectorized batch patch extraction from dataset with surface pressure aware level selection.
+        Args:
+        - batch (list[tuple[int,int,int]]): list of (latidx, lonidx, timeidx) centers
+        - dataset (PatchDataset): dataset instance
+        Returns:
+        - dict[str,torch.Tensor]: dictionary with fieldpatch, dareapatch, dlevpatch, dtimepatch, targetvalues, and optionally localvalues
+        '''
         latidx = torch.tensor([b[0] for b in batch],dtype=torch.long)
         lonidx = torch.tensor([b[1] for b in batch],dtype=torch.long)
         timeidx = torch.tensor([b[2] for b in batch],dtype=torch.long)
@@ -127,9 +179,22 @@ class PatchDataset(torch.utils.data.Dataset):
             localvalues = dataset.local[:,latidx,lonidx,timeidx].permute(1,0).contiguous()
             out['localvalues'] = localvalues
         return out
+
 class PatchDataLoader:
+
     @staticmethod
     def prepare(splits,fieldvars,localvars,targetvar,filedir):
+        '''
+        Purpose: Load data splits and prepare tensors for patch extraction.
+        Args:
+        - splits (list[str]): list of split names
+        - fieldvars (list[str]): list of field variable names
+        - localvars (list[str]): list of local variable names
+        - targetvar (str): target variable name
+        - filedir (str): directory containing split files
+        Returns:
+        - dict[str,dict]: dictionary mapping split names to data dictionaries
+        '''
         result = {}
         for split in splits:
             filename = f'{split}.h5'
@@ -159,8 +224,23 @@ class PatchDataLoader:
                 'lats':ds.lat.values,
                 'lons':ds.lon.values}
         return result
+
     @staticmethod
     def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device):
+        '''
+        Purpose: Create PyTorch DataLoaders for all splits.
+        Args:
+        - splitdata (dict): dictionary from prepare method
+        - patchconfig (dict): patch configuration with radius, maxlevs, timelag
+        - uselocal (bool): whether to use local inputs
+        - latrange (tuple[float,float]): latitude range
+        - lonrange (tuple[float,float]): longitude range
+        - batchsize (int): batch size for DataLoader
+        - workers (int): number of worker processes
+        - device (str): device type
+        Returns:
+        - dict: dictionary with datasets and loaders
+        '''
         kwargs = dict(num_workers=workers,pin_memory=(device=='cuda'),persistent_workers=(workers>0))
         if workers>0:
             kwargs['prefetch_factor'] = 4
