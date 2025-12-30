@@ -131,7 +131,11 @@ class PatchDataset(torch.utils.data.Dataset):
         else:
             timegridclamp = timeidx[:,None]
             timemask = None
-        pspatch = ps[latpatchidx,lonpatchidx,timegridclamp[:,None,None,:]]
+        ptimes = timegridclamp.shape[1]
+        latpatchidx4d = latpatchidx[:,:,:,None].expand(-1,-1,-1,ptimes)
+        lonpatchidx4d = lonpatchidx[:,:,:,None].expand(-1,-1,-1,ptimes)
+        timepatchidx4d = timegridclamp[:,None,None,:].expand(-1,plats,plons,-1)
+        pspatch = ps[latpatchidx4d,lonpatchidx4d,timepatchidx4d]
         psmin = pspatch.reshape(latidx.shape[0],-1).min(dim=1).values
         levidxlist = []
         for batchidx in range(latidx.shape[0]):
@@ -149,7 +153,6 @@ class PatchDataset(torch.utils.data.Dataset):
         field = dataset.field
         nfieldvars = field.shape[0]
         plevs = maxlevs
-        ptimes = timegridclamp.shape[1]
         nbatch = latidx.shape[0]
         fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
         for batchidx in range(nbatch):
