@@ -129,7 +129,7 @@ class PatchDataset(torch.utils.data.Dataset):
             validmask = lev <= pscenter[i]
             validindices = torch.where(validmask)[0]
             if len(validindices) >= maxlevs:
-                levidx_list.append(validindices[:maxlevs])
+                levidx_list.append(validindices[-maxlevs:])
             else:
                 # Not enough valid levels, use all valid ones
                 levidx_list.append(validindices)
@@ -173,7 +173,7 @@ class PatchDataset(torch.utils.data.Dataset):
         # Apply per-point surface masking (some points in patch may have different ps)
         pspatch = ps[latix,lonix,timegridclamped[:,None,None,:]]
         for i in range(nbatch):
-            levgrid_i = lev[levidx[i]][None,None,:,None]  # (1, 1, plevs, 1)
+            levgrid_i = lev[levidx[i]][None,None,None,:,None]  # (1, 1, 1, plevs, 1)
             pspatch_i = pspatch[i:i+1,:,:,None,:]  # (1, plats, plons, 1, ptimes) - add level dim
             belowsurface_i = levgrid_i > pspatch_i  # (1, plats, plons, plevs, ptimes)
             belowsurface_i = belowsurface_i[:,None,:,:,:,:].expand(-1,nfieldvars,-1,-1,-1,-1)
