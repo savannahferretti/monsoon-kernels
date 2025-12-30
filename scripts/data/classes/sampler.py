@@ -116,7 +116,32 @@ class PatchDataset(torch.utils.data.Dataset):
         lonoff = torch.arange(-radius,radius+1,dtype=torch.long)
         latgrid = latidx[:,None]+latoff[None,:]
         longrid = lonidx[:,None]+lonoff[None,:]
-        levidx = torch.arange(maxlevs,dtype=torch.long)
+
+        # Dynamically select lowest valid levels based on center point surface pressure
+        ps = dataset.ps
+        lev = dataset.lev
+        pscenter = ps[latidx,lonidx,timeidx]  # (nbatch,)
+        nlevstotal = lev.shape[0]
+
+        # For each sample, find lowest maxlevs valid levels
+        levidx_list = []
+        for i in range(latidx.shape[0]):
+            validmask = lev <= pscenter[i]
+            validindices = torch.where(validmask)[0]
+            if len(validindices) >= maxlevs:
+                levidx_list.append(validindices[:maxlevs])
+            else:
+                # Not enough valid levels, use all valid ones
+                levidx_list.append(validindices)
+
+        # Pad to ensure all have same length
+        levidx = torch.zeros(len(levidx_list),maxlevs,dtype=torch.long)
+        for i,indices in enumerate(levidx_list):
+            levidx[i,:len(indices)] = indices
+            if len(indices) < maxlevs:
+                # Pad with last valid index
+                levidx[i,len(indices):] = indices[-1] if len(indices) > 0 else 0
+
         if timelag>0:
             timeoff = torch.arange(-timelag,1,dtype=torch.long)
             timegrid = timeidx[:,None]+timeoff[None,:]
@@ -129,29 +154,37 @@ class PatchDataset(torch.utils.data.Dataset):
         nfieldvars = field.shape[0]
         plats = latgrid.shape[1]
         plons = longrid.shape[1]
-        plevs = levidx.shape[0]
+        plevs = maxlevs
         ptimes = timegridclamped.shape[1]
         latix = latgrid[:,:,None].expand(-1,-1,plons)
         lonix = longrid[:,None,:].expand(-1,plats,-1)
-        latix6 = latix[:,None,:,:,None,None]
-        lonix6 = lonix[:,None,:,:,None,None]
-        levix6 = levidx[None,None,None,None,:,None]
-        timix6 = timegridclamped[:,None,None,None,None,:]
-        fieldpatch = field[:,latix6.squeeze(1),lonix6.squeeze(1),levix6.squeeze(0).squeeze(0),timix6.squeeze(1)]
-        fieldpatch = fieldpatch.permute(1,0,2,3,4,5).contiguous()
+
+        # Extract field data using per-sample level indices
+        nbatch = latidx.shape[0]
+        fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
+        for i in range(nbatch):
+            for k in range(plevs):
+                for t in range(ptimes):
+                    fieldpatch[i,:,:,:,k,t] = field[:,latix[i],lonix[i],levidx[i,k],timegridclamped[i,t]]
         if timelag>0 and tmask is not None and tmask.any():
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
-        ps = dataset.ps
-        lev = dataset.lev
+
+        # Apply per-point surface masking (some points in patch may have different ps)
         pspatch = ps[latix,lonix,timegridclamped[:,None,None,:]]
-        levgrid = lev[levidx][None,None,None,:,None]
-        belowsurface = levgrid>pspatch[:,:,:,None,:]
-        belowsurface = belowsurface[:,None,:,:,:,:].expand(-1,nfieldvars,-1,-1,-1,-1)
-        fieldpatch = fieldpatch.masked_fill(belowsurface,float('nan'))
+        for i in range(nbatch):
+            levgrid_i = lev[levidx[i]][None,None,:,None]  # (1, 1, plevs, 1)
+            belowsurface_i = levgrid_i > pspatch[i:i+1,:,:,:,:]  # (1, plats, plons, plevs, ptimes)
+            belowsurface_i = belowsurface_i[:,None,:,:,:,:].expand(-1,nfieldvars,-1,-1,-1,-1)
+            fieldpatch[i:i+1] = fieldpatch[i:i+1].masked_fill(belowsurface_i,float('nan'))
+
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
-        dlevpatch = dataset.dlev[levidx][None,:].expand(latidx.shape[0],-1).contiguous()
+
+        # Extract dlev for dynamically selected levels per sample
+        dlevpatch = torch.zeros(nbatch,plevs,dtype=dataset.dlev.dtype,device=dataset.dlev.device)
+        for i in range(nbatch):
+            dlevpatch[i] = dataset.dlev[levidx[i]]
         dtime = dataset.dtime
         dtimepatch = dtime[timegridclamped].contiguous()
         if timelag>0 and tmask is not None and tmask.any():
