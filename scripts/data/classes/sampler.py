@@ -149,6 +149,16 @@ class PatchDataset(torch.utils.data.Dataset):
         belowsurface = levgrid>pspatch[:,:,:,None,:]
         belowsurface = belowsurface[:,None,:,:,:,:].expand(-1,nfieldvars,-1,-1,-1,-1)
         fieldpatch = fieldpatch.masked_fill(belowsurface,float('nan'))
+
+        # Extract lowest valid level (highest pressure above surface) for each sample
+        # For baseline models that only use surface-level data
+        validlevels = levgrid<=pspatch[:,:,:,None,:]
+        validlevels_reversed = validlevels.flip(dims=[3])
+        lowestvalidlevidx_reversed = validlevels_reversed.to(torch.long).argmax(dim=3)
+        lowestvalidlevidx = plevs-1-lowestvalidlevidx_reversed
+        lowestvalidlevidx_expanded = lowestvalidlevidx[:,None,:,:,None,:].expand(-1,nfieldvars,-1,-1,1,-1)
+        lowestvalidfield = torch.gather(fieldpatch,4,lowestvalidlevidx_expanded).squeeze(4)
+
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
         dlevpatch = dataset.dlev[levidx][None,:].expand(latidx.shape[0],-1).contiguous()
@@ -159,6 +169,7 @@ class PatchDataset(torch.utils.data.Dataset):
         targetvalues = dataset.target[latidx,lonidx,timeidx].contiguous()
         out = {
             'fieldpatch':fieldpatch,
+            'lowestvalidfield':lowestvalidfield,
             'dareapatch':dareapatch,
             'dlevpatch':dlevpatch,
             'dtimepatch':dtimepatch,
