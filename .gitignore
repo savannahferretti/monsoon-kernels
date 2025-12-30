@@ -19,9 +19,10 @@ data/weights/*
 **/wandb/
 
 # Ignore specific file types
-*.nc                      
+*.nc
 *.h5
 *.pkl
 *.sh
 *.pth
 *.npz
+*.pyc
