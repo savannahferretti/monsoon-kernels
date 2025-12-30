@@ -74,48 +74,48 @@ class PatchDataset(torch.utils.data.Dataset):
         if timelag>0:
             timeoffset = torch.arange(-timelag,1,dtype=torch.long)
             timegrid = timeidx[:,None]+timeoffset[None,:]
-            tmask = timegrid<0
+            timemask = timegrid<0
             timegridclamp = timegrid.clamp(min=0)
         else:
             timegridclamp = timeidx[:,None]
-            tmask = None
+            timemask = None
         pspatch = ps[latpatchidx,lonpatchidx,timegridclamp[:,None,None,:]]
         psmin = pspatch.reshape(latidx.shape[0],-1).min(dim=1).values
         levidxlist = []
-        for i in range(latidx.shape[0]):
-            validmask = lev <= psmin[i]
+        for batchidx in range(latidx.shape[0]):
+            validmask = lev <= psmin[batchidx]
             valididxs = torch.where(validmask)[0]
             if len(valididxs) >= maxlevs:
                 levidxlist.append(valididxs[-maxlevs:])
             else:
                 levidxlist.append(valididxs)
         levidx = torch.zeros(len(levidxlist),maxlevs,dtype=torch.long)
-        for i,idxs in enumerate(levidxlist):
-            levidx[i,:len(idxs)] = idxs
+        for batchidx,idxs in enumerate(levidxlist):
+            levidx[batchidx,:len(idxs)] = idxs
             if len(idxs) < maxlevs:
-                levidx[i,len(idxs):] = idxs[-1] if len(idxs) > 0 else 0
+                levidx[batchidx,len(idxs):] = idxs[-1] if len(idxs) > 0 else 0
         field = dataset.field
         nfieldvars = field.shape[0]
         plevs = maxlevs
         ptimes = timegridclamp.shape[1]
         nbatch = latidx.shape[0]
         fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
-        for i in range(nbatch):
-            for k in range(plevs):
-                for t in range(ptimes):
-                    fieldpatch[i,:,:,:,k,t] = field[:,latpatchidx[i],lonpatchidx[i],levidx[i,k],timegridclamp[i,t]]
-        if timelag>0 and tmask is not None and tmask.any():
-            tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
-            fieldpatch = fieldpatch.masked_fill(tmask6,0)
+        for batchidx in range(nbatch):
+            for patchlevidx in range(plevs):
+                for patchtimeidx in range(ptimes):
+                    fieldpatch[batchidx,:,:,:,patchlevidx,patchtimeidx] = field[:,latpatchidx[batchidx],lonpatchidx[batchidx],levidx[batchidx,patchlevidx],timegridclamp[batchidx,patchtimeidx]]
+        if timelag>0 and timemask is not None and timemask.any():
+            fulltimemask = timemask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
+            fieldpatch = fieldpatch.masked_fill(fulltimemask,0)
         darea = dataset.darea
         dareapatch = darea[latpatchidx,lonpatchidx].contiguous()
         dlevpatch = torch.zeros(nbatch,plevs,dtype=dataset.dlev.dtype,device=dataset.dlev.device)
-        for i in range(nbatch):
-            dlevpatch[i] = dataset.dlev[levidx[i]]
+        for batchidx in range(nbatch):
+            dlevpatch[batchidx] = dataset.dlev[levidx[batchidx]]
         dtime = dataset.dtime
         dtimepatch = dtime[timegridclamp].contiguous()
-        if timelag>0 and tmask is not None and tmask.any():
-            dtimepatch = dtimepatch.masked_fill(tmask,0)
+        if timelag>0 and timemask is not None and timemask.any():
+            dtimepatch = dtimepatch.masked_fill(timemask,0)
         targetvalues = dataset.target[latidx,lonidx,timeidx].contiguous()
         out = {
             'fieldpatch':fieldpatch,
