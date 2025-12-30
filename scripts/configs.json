@@ -30,7 +30,7 @@
     "target":"pr"
   },
   "training":{
-    "projectname":"Model Experiments",
+    "projectname":" Integration Kernel Model Experiments",
     "seed":42,
     "workers":8,
     "epochs":20,
