@@ -154,11 +154,12 @@ class PatchDataset(torch.utils.data.Dataset):
         nfieldvars = field.shape[0]
         plevs = maxlevs
         nbatch = latidx.shape[0]
-        fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
-        for batchidx in range(nbatch):
-            for patchlevidx in range(plevs):
-                for patchtimeidx in range(ptimes):
-                    fieldpatch[batchidx,:,:,:,patchlevidx,patchtimeidx] = field[:,latpatchidx[batchidx],lonpatchidx[batchidx],levidx[batchidx,patchlevidx],timegridclamp[batchidx,patchtimeidx]]
+        latpatchidx5d = latpatchidx[:,:,:,None,None].expand(-1,-1,-1,plevs,ptimes)
+        lonpatchidx5d = lonpatchidx[:,:,:,None,None].expand(-1,-1,-1,plevs,ptimes)
+        levpatchidx5d = levidx[:,None,None,:,None].expand(-1,plats,plons,-1,ptimes)
+        timepatchidx5d = timegridclamp[:,None,None,None,:].expand(-1,plats,plons,plevs,-1)
+        fieldpatch = field[:,latpatchidx5d,lonpatchidx5d,levpatchidx5d,timepatchidx5d]
+        fieldpatch = fieldpatch.permute(1,0,2,3,4,5).contiguous()
         if timelag>0 and timemask is not None and timemask.any():
             fulltimemask = timemask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(fulltimemask,0)
