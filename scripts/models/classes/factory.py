@@ -30,7 +30,7 @@ class ModelFactory:
         elif kind=='parametric':
             nkernels   = modelconfig['nkernels']
             kerneldict = modelconfig['kerneldict']
-            intkernel = ParametricKernelLayer(nfieldvars,nkernels,kerneldict)
+            intkernel = ParametricKernelLayer(nfieldvars,nkernels,kerneldict,patchshape)
             model = KernelNN(intkernel,nlocalvars,uselocal,patchshape)
         else:
             raise ValueError(f'Unknown model kind `{kind}`')
