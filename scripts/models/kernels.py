@@ -159,10 +159,10 @@ class NonparametricKernelLayer(torch.nn.Module):
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels*preserved_dims)
         '''
-        dareamean = dareapatch.mean(dim=0)
-        dlevmean = dlevpatch.mean(dim=0)
-        dtimemean = dtimepatch.mean(dim=0)
-        weights = self.get_weights(dareamean,dlevmean,dtimemean,fieldpatch.device)
+        darearef = dareapatch[0]
+        dlevref = dlevpatch[0]
+        dtimeref = dtimepatch[0]
+        weights = self.get_weights(darearef,dlevref,dtimeref,fieldpatch.device)
         feats = KernelModule.integrate(fieldpatch,weights,dareapatch,dlevpatch,dtimepatch,self.kerneldims)
         self.features = feats
         return feats.flatten(1)
@@ -283,10 +283,10 @@ class ParametricKernelLayer(torch.nn.Module):
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels*preserved_dims)
         '''
-        dareamean = dareapatch.mean(dim=0)
-        dlevmean  = dlevpatch.mean(dim=0)
-        dtimemean = dtimepatch.mean(dim=0)
-        weights   = self.get_weights(dareamean,dlevmean,dtimemean,fieldpatch.device)
+        darearef = dareapatch[0]
+        dlevref  = dlevpatch[0]
+        dtimeref = dtimepatch[0]
+        weights   = self.get_weights(darearef,dlevref,dtimeref,fieldpatch.device)
         feats = KernelModule.integrate(fieldpatch,weights,dareapatch,dlevpatch,dtimepatch,self.kerneldims)
         self.features = feats
         return feats.flatten(1)
