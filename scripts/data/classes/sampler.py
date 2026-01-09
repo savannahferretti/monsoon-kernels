@@ -164,7 +164,7 @@ class PatchDataset(torch.utils.data.Dataset):
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
         pspatch = ps[latix,lonix,timegridclamped[:,None,None,:]]
         for i in range(nbatch):
-            levgridi = lev[levidx[i]][None,None,:,None]
+            levgridi = lev[levidx[i]][None,None,None,:,None]
             psppatchi = pspatch[i:i+1,:,:,None,:]
             belowsurfacei = levgridi > psppatchi
             belowsurfacei = belowsurfacei[:,None,:,:,:,:].expand(-1,nfieldvars,-1,-1,-1,-1)
