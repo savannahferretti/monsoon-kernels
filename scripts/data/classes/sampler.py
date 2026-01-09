@@ -162,7 +162,10 @@ class PatchDataset(torch.utils.data.Dataset):
         if timelag>0 and tmask is not None and tmask.any():
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
-        pspatch = ps[latix,lonix,timegridclamped[:,None,None,:]]
+        latixexp = latix[:,:,:,None].expand(-1,-1,-1,ptimes)
+        lonixexp = lonix[:,:,:,None].expand(-1,-1,-1,ptimes)
+        timeixexp = timegridclamped[:,None,None,:].expand(-1,plats,plons,-1)
+        pspatch = ps[latixexp,lonixexp,timeixexp]
         for i in range(nbatch):
             levselected = lev[levidx[i]]
             psgrid = pspatch[i]
