@@ -160,13 +160,13 @@ if __name__=='__main__':
     logger.info('Spinning up...')
     device       = setup()
     models,split = parse()
-
     logger.info('Preparing evaluation split...')
     splitdata = PatchDataLoader.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
-
+    maxradius = max(m['patch']['radius'] for m in config.models)
+    maxtimelag = max(m['patch']['timelag'] for m in config.models)
+    logger.info(f'Common domain constraints: maxradius={maxradius}, maxtimelag={maxtimelag}')
     cachedconfig = None
     cachedresult = None
-
     for modelconfig in config.models:
         name = modelconfig['name']
         kind = modelconfig['kind']
@@ -182,7 +182,7 @@ if __name__=='__main__':
         if currentconfig==cachedconfig:
             result = cachedresult
         else:
-            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device) 
+            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,maxradius,maxtimelag)
             cachedconfig = currentconfig
             cachedresult = result
 

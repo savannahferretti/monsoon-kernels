@@ -68,6 +68,9 @@ if __name__=='__main__':
     models = parse()
     logger.info('Preparing data splits...')
     splitdata    = PatchDataLoader.prepare(['train','valid'],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
+    maxradius = max(m['patch']['radius'] for m in config.models)
+    maxtimelag = max(m['patch']['timelag'] for m in config.models)
+    logger.info(f'Common domain constraints: maxradius={maxradius}, maxtimelag={maxtimelag}')
     cachedconfig = None
     cachedresult = None
     for modelconfig in config.models:
@@ -83,7 +86,7 @@ if __name__=='__main__':
             result = cachedresult
         else:
             result = PatchDataLoader.dataloaders(
-                splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device)
+                splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device,maxradius,maxtimelag)
             cachedconfig = currentconfig
             cachedresult = result
         model = initialize(name,modelconfig,result,device,config.fieldvars,config.localvars)

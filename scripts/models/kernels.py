@@ -8,12 +8,12 @@ class KernelModule:
     @staticmethod
     def normalize(kernel,dareapatch,dlevpatch,dtimepatch,kerneldims,epsilon=1e-6):
         '''
-        Purpose: Normalize a kernel so the raw weights sum to 1 (without quadrature).
+        Purpose: Normalize kernel so that sum(k * quadrature_weights) = 1 over kerneled dimensions.
         Args:
         - kernel (torch.Tensor): unnormalized kernel with shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
-        - dareapatch (torch.Tensor): horizontal area weights patch (not used, kept for API compatibility)
-        - dlevpatch (torch.Tensor): vertical thickness weights patch (not used, kept for API compatibility)
-        - dtimepatch (torch.Tensor): time step weights patch (not used, kept for API compatibility)
+        - dareapatch (torch.Tensor): horizontal area weights with shape (plats, plons)
+        - dlevpatch (torch.Tensor): vertical thickness weights with shape (plevs,)
+        - dtimepatch (torch.Tensor): time step weights with shape (ptimes,)
         - kerneldims (tuple[str] | list[str]): dimensions the kernel varies along
         - epsilon (float): stabilizer to avoid divide-by-zero (defaults to 1e-6)
         Returns:
@@ -21,13 +21,16 @@ class KernelModule:
         '''
         kerneldims = tuple(kerneldims)
         plats,plons = dareapatch.shape
-        plevs       = dlevpatch.numel()
-        ptimes      = dtimepatch.numel()
-
-        # Sum kernel weights along spatial/temporal dimensions (no quadrature)
-        kernelsum = kernel.sum(dim=(2,3,4,5))
-
-        # Average over dimensions not in kerneldims (since kernel is constant along those dims)
+        plevs = dlevpatch.numel()
+        ptimes = dtimepatch.numel()
+        quad = torch.ones(1,1,plats,plons,plevs,ptimes,dtype=kernel.dtype,device=kernel.device)
+        if ('lat' in kerneldims) or ('lon' in kerneldims):
+            quad = quad*dareapatch[None,None,:,:,None,None]
+        if 'lev' in kerneldims:
+            quad = quad*dlevpatch[None,None,None,None,:,None]
+        if 'time' in kerneldims:
+            quad = quad*dtimepatch[None,None,None,None,None,:]
+        kernelsum = (kernel*quad).sum(dim=(2,3,4,5))
         if 'lat' not in kerneldims:
             kernelsum = kernelsum/plats
         if 'lon' not in kerneldims:
@@ -36,12 +39,8 @@ class KernelModule:
             kernelsum = kernelsum/plevs
         if 'time' not in kerneldims:
             kernelsum = kernelsum/ptimes
-
-        # Normalize so kernel weights sum to 1
         weights = kernel/(kernelsum[:,:,None,None,None,None]+epsilon)
-
-        # Sanity check: verify normalized kernel sums to 1
-        checksum = weights.sum(dim=(2,3,4,5))
+        checksum = (weights*quad).sum(dim=(2,3,4,5))
         if 'lat' not in kerneldims:
             checksum = checksum/plats
         if 'lon' not in kerneldims:
@@ -50,22 +49,19 @@ class KernelModule:
             checksum = checksum/plevs
         if 'time' not in kerneldims:
             checksum = checksum/ptimes
-
-        assert torch.allclose(checksum, torch.ones_like(checksum), atol=1e-4), \
-            f"Kernel normalization failed: weights sum to {checksum.mean().item():.6f} instead of 1.0"
-
+        assert torch.allclose(checksum,torch.ones_like(checksum),atol=1e-4),f"Kernel normalization failed: weights sum to {checksum.mean().item():.6f} instead of 1.0"
         return weights
 
     @staticmethod
     def integrate(fieldpatch,weights,dareapatch,dlevpatch,dtimepatch,kerneldims):
         '''
-        Purpose: Integrate predictor fields using normalized kernel weights over kerneled dimensions, preserving non-kerneled dimensions. NaN values are ignored during integration.
+        Purpose: Integrate predictor fields using normalized kernel weights with quadrature over kerneled dimensions.
         Args:
         - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
         - weights (torch.Tensor): normalized kernel weights with shape (nfieldvars, nkernels, plats or 1, plons or 1, plevs or 1, ptimes or 1)
-        - dareapatch (torch.Tensor): horizontal area weights patch with shape (nbatch, plats, plons)
-        - dlevpatch (torch.Tensor): vertical thickness weights patch with shape (nbatch, plevs)
-        - dtimepatch (torch.Tensor): time step weights patch with shape (nbatch, ptimes)
+        - dareapatch (torch.Tensor): horizontal area weights with shape (nbatch, plats, plons)
+        - dlevpatch (torch.Tensor): vertical thickness weights with shape (nbatch, plevs)
+        - dtimepatch (torch.Tensor): time step weights with shape (nbatch, ptimes)
         - kerneldims (tuple[str] | list[str]): dimensions the kernel varies along
         Returns:
         - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars, nkernels, ...) where ... are preserved non-kerneled dimensions
