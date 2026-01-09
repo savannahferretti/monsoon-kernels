@@ -166,16 +166,12 @@ class PatchDataset(torch.utils.data.Dataset):
         lonixexp = lonix[:,:,:,None].expand(-1,-1,-1,ptimes)
         timeixexp = timegridclamped[:,None,None,:].expand(-1,plats,plons,-1)
         pspatch = ps[latixexp,lonixexp,timeixexp]
-        for i in range(nbatch):
-            levselected = lev[levidx[i]]
-            psgrid = pspatch[i]
-            for j in range(plats):
-                for k in range(plons):
-                    for t in range(ptimes):
-                        psval = psgrid[j,k,t]
-                        for m in range(plevs):
-                            if levselected[m] > psval:
-                                fieldpatch[i,:,j,k,m,t] = float('nan')
+        levselected = lev[levidx]
+        levselected = levselected[:,None,None,None,:,None]
+        pspatchexp = pspatch[:,None,:,:,None,:]
+        belowsurface = levselected > pspatchexp
+        belowsurface = belowsurface.expand(-1,nfieldvars,-1,-1,-1,-1)
+        fieldpatch = fieldpatch.masked_fill(belowsurface,float('nan'))
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
         dlevpatch = torch.zeros(nbatch,plevs,dtype=dataset.dlev.dtype,device=dataset.dlev.device)

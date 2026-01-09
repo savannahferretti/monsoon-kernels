@@ -191,7 +191,6 @@ class Trainer:
                        'Number of parameters':self.model.nparams if hasattr(self.model,'nparams') else sum(p.numel() for p in self.model.parameters()),
                        'Device':self.device,
                        'Mixed precision':self.use_amp,
-                       'Gradient accumulation steps':self.grad_accum_steps,
                        'Training samples':trainsamples,
                        'Validation samples':validsamples})
         beststate = None
