@@ -183,11 +183,13 @@ class PatchDataset(torch.utils.data.Dataset):
         if timelag>0 and tmask is not None and tmask.any():
             dtimepatch = dtimepatch.masked_fill(tmask,0)
         targetvalues = dataset.target[latidx,lonidx,timeidx].contiguous()
+        dlevfull = dataset.dlev
         out = {
             'fieldpatch':fieldpatch,
             'dareapatch':dareapatch,
             'dlevpatch':dlevpatch,
             'dtimepatch':dtimepatch,
+            'dlevfull':dlevfull,
             'targetvalues':targetvalues}
         if dataset.uselocal and dataset.local is not None:
             localvalues = dataset.local[:,latidx,lonidx,timeidx].permute(1,0).contiguous()

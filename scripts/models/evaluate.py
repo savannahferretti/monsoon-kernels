@@ -96,7 +96,8 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
             dareapatch = batch["dareapatch"].to(device,non_blocking=True)
             dlevpatch  = batch["dlevpatch"].to(device,non_blocking=True)
             dtimepatch = batch["dtimepatch"].to(device,non_blocking=True)
-            _ = model.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
+            dlevfull   = batch["dlevfull"].to(device,non_blocking=True)
+            _ = model.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull)
     state = torch.load(filepath,map_location='cpu')
     model.load_state_dict(state)
     return model.to(device)
@@ -134,7 +135,8 @@ def inference(model,split,result,uselocal,device):
                 dareapatch = batch['dareapatch'].to(device)
                 dlevpatch = batch['dlevpatch'].to(device)
                 dtimepatch = batch['dtimepatch'].to(device)
-                outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                dlevfull = batch['dlevfull'].to(device)
+                outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                 if weights is None:
                     if model.intkernel.weights is None:
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')

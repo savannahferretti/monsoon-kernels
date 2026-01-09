@@ -93,10 +93,11 @@ class Trainer:
                 dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
                 dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
                 dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
+                dlevfull   = batch['dlevfull'].to(self.device,non_blocking=True)
             if self.use_amp:
                 with autocast('cuda',enabled=self.use_amp):
                     if haskernel:
-                        outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                        outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                     else:
                         outputvalues = self.model(fieldpatch,localvalues)
                     loss = self.criterion(outputvalues,targetvalues)
@@ -108,7 +109,7 @@ class Trainer:
                     self.optimizer.zero_grad()
             else:
                 if haskernel:
-                    outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                    outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                 else:
                     outputvalues = self.model(fieldpatch,localvalues)
                 loss = self.criterion(outputvalues,targetvalues)
@@ -140,16 +141,17 @@ class Trainer:
                     dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
                     dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
                     dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
+                    dlevfull   = batch['dlevfull'].to(self.device,non_blocking=True)
                 if self.use_amp:
                     with autocast('cuda',enabled=self.use_amp):
                         if haskernel:
-                            outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                            outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                         else:
                             outputvalues = self.model(fieldpatch,localvalues)
                         loss = self.criterion(outputvalues,targetvalues)
                 else:
                     if haskernel:
-                        outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                        outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                     else:
                         outputvalues = self.model(fieldpatch,localvalues)
                     loss = self.criterion(outputvalues,targetvalues)
