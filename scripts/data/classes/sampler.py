@@ -154,11 +154,12 @@ class PatchDataset(torch.utils.data.Dataset):
         latix = latgrid[:,:,None].expand(-1,-1,plons)
         lonix = longrid[:,None,:].expand(-1,plats,-1)
         nbatch = latidx.shape[0]
-        fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
-        for i in range(nbatch):
-            for k in range(plevs):
-                for t in range(ptimes):
-                    fieldpatch[i,:,:,:,k,t] = field[:,latix[i],lonix[i],levidx[i,k],timegridclamped[i,t]]
+        latixfield = latix[:,:,:,None,None].expand(-1,-1,-1,plevs,ptimes)
+        lonixfield = lonix[:,:,:,None,None].expand(-1,-1,-1,plevs,ptimes)
+        levixfield = levidx[:,None,None,:,None].expand(-1,plats,plons,-1,ptimes)
+        timeixfield = timegridclamped[:,None,None,None,:].expand(-1,plats,plons,plevs,-1)
+        fieldpatch = field[:,latixfield,lonixfield,levixfield,timeixfield]
+        fieldpatch = fieldpatch.permute(1,0,2,3,4,5).contiguous()
         if timelag>0 and tmask is not None and tmask.any():
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
