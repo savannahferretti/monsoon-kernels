@@ -61,6 +61,7 @@ class BaselineNN(torch.nn.Module):
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
+        fieldpatch = torch.nan_to_num(fieldpatch,nan=0.0)
         fieldpatch = fieldpatch.flatten(1)
         if self.uselocal:
             if localvalues is None:

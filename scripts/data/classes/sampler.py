@@ -7,12 +7,12 @@ import xarray as xr
 
 class PatchDataset(torch.utils.data.Dataset):
 
-    def __init__(self,radius,maxlevs,timelag,field,darea,dlev,dtime,ps,lev,local,target,uselocal,lats,lons,latrange,lonrange,maxradius,maxtimelag):
+    def __init__(self,radius,levmode,timelag,field,darea,dlev,dtime,ps,lev,local,target,uselocal,lats,lons,latrange,lonrange,maxradius,maxtimelag):
         '''
         Purpose: Initialize dataset for extracting spatial-temporal patches from climate data.
         Args:
         - radius (int): number of horizontal grid points on each side of center for this model
-        - maxlevs (int): maximum number of vertical levels
+        - levmode (str): vertical level extraction mode (surface or column)
         - timelag (int): number of past time steps for this model; if 0, use only current time
         - field (torch.Tensor): predictor fields with shape (nfieldvars, nlats, nlons, nlevs, ntimes)
         - darea (torch.Tensor): horizontal area weights with shape (nlats, nlons)
@@ -48,7 +48,7 @@ class PatchDataset(torch.utils.data.Dataset):
         if target.ndim!=3:
             raise ValueError('`target` must have shape (nlats, nlons, ntimes)')
         self.radius = int(radius)
-        self.maxlevs = int(maxlevs)
+        self.levmode = str(levmode)
         self.timelag = int(timelag)
         self.maxradius = int(maxradius)
         self.maxtimelag = int(maxtimelag)
@@ -96,7 +96,7 @@ class PatchDataset(torch.utils.data.Dataset):
         '''
         plats = 2*self.radius + 1
         plons = 2*self.radius + 1
-        plevs = self.maxlevs
+        plevs = 1 if self.levmode=='surface' else 16
         ptimes = self.timelag + 1 if self.timelag > 0 else 1
         return (plats,plons,plevs,ptimes)
 
@@ -114,7 +114,7 @@ class PatchDataset(torch.utils.data.Dataset):
         lonidx = torch.tensor([b[1] for b in batch],dtype=torch.long)
         timeidx = torch.tensor([b[2] for b in batch],dtype=torch.long)
         radius = dataset.radius
-        maxlevs = dataset.maxlevs
+        levmode = dataset.levmode
         timelag = dataset.timelag
         latoff = torch.arange(-radius,radius+1,dtype=torch.long)
         lonoff = torch.arange(-radius,radius+1,dtype=torch.long)
@@ -122,21 +122,6 @@ class PatchDataset(torch.utils.data.Dataset):
         longrid = lonidx[:,None]+lonoff[None,:]
         ps = dataset.ps
         lev = dataset.lev
-        pscenter = ps[latidx,lonidx,timeidx]
-        nlevstotal = lev.shape[0]
-        levidxlist = []
-        for i in range(latidx.shape[0]):
-            validmask = lev <= pscenter[i]
-            validindices = torch.where(validmask)[0]
-            if len(validindices) >= maxlevs:
-                levidxlist.append(validindices[:maxlevs])
-            else:
-                levidxlist.append(validindices)
-        levidx = torch.zeros(len(levidxlist),maxlevs,dtype=torch.long)
-        for i,indices in enumerate(levidxlist):
-            levidx[i,:len(indices)] = indices
-            if len(indices) < maxlevs:
-                levidx[i,len(indices):] = indices[-1] if len(indices) > 0 else 0
         if timelag>0:
             timeoff = torch.arange(-timelag,1,dtype=torch.long)
             timegrid = timeidx[:,None]+timeoff[None,:]
@@ -149,33 +134,47 @@ class PatchDataset(torch.utils.data.Dataset):
         nfieldvars = field.shape[0]
         plats = latgrid.shape[1]
         plons = longrid.shape[1]
-        plevs = maxlevs
+        plevs = 1 if levmode=='surface' else 16
         ptimes = timegridclamped.shape[1]
         latix = latgrid[:,:,None].expand(-1,-1,plons)
         lonix = longrid[:,None,:].expand(-1,plats,-1)
         nbatch = latidx.shape[0]
-        fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
-        for ilev in range(plevs):
-            for itime in range(ptimes):
-                fieldpatch[:,:,:,:,ilev,itime] = field[:,latix,lonix,levidx[:,ilev],timegridclamped[:,itime]]
-        if timelag>0 and tmask is not None and tmask.any():
-            tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
-            fieldpatch = fieldpatch.masked_fill(tmask6,0)
         latixexp = latix[:,:,:,None].expand(-1,-1,-1,ptimes)
         lonixexp = lonix[:,:,:,None].expand(-1,-1,-1,ptimes)
         timeixexp = timegridclamped[:,None,None,:].expand(-1,plats,plons,-1)
         pspatch = ps[latixexp,lonixexp,timeixexp]
-        levselected = lev[levidx]
-        levselected = levselected[:,None,None,None,:,None]
-        pspatchexp = pspatch[:,None,:,:,None,:]
-        belowsurface = levselected > pspatchexp
-        belowsurface = belowsurface.expand(-1,nfieldvars,-1,-1,-1,-1)
-        fieldpatch = fieldpatch.masked_fill(belowsurface,float('nan'))
+        fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
+        if levmode=='surface':
+            levidx = torch.zeros(nbatch,plats,plons,ptimes,dtype=torch.long,device=field.device)
+            for ilat in range(plats):
+                for ilon in range(plons):
+                    for itime in range(ptimes):
+                        pssample = pspatch[:,ilat,ilon,itime]
+                        for i in range(nbatch):
+                            validmask = lev <= pssample[i]
+                            validindices = torch.where(validmask)[0]
+                            levidx[i,ilat,ilon,itime] = validindices[0] if len(validindices)>0 else 0
+            for ilat in range(plats):
+                for ilon in range(plons):
+                    for itime in range(ptimes):
+                        fieldpatch[:,:,ilat,ilon,0,itime] = field[:,latix[:,ilat,ilon],lonix[:,ilat,ilon],levidx[:,ilat,ilon,itime],timegridclamped[:,itime]]
+        else:
+            levidx = torch.arange(16,dtype=torch.long)
+            for ilev in range(plevs):
+                for itime in range(ptimes):
+                    fieldpatch[:,:,:,:,ilev,itime] = field[:,latix,lonix,levidx[ilev],timegridclamped[:,itime]]
+            levselected = lev[levidx]
+            levselected = levselected[None,None,None,None,:,None]
+            pspatchexp = pspatch[:,None,:,:,None,:]
+            belowsurface = levselected > pspatchexp
+            belowsurface = belowsurface.expand(-1,nfieldvars,-1,-1,-1,-1)
+            fieldpatch = fieldpatch.masked_fill(belowsurface,float('nan'))
+        if timelag>0 and tmask is not None and tmask.any():
+            tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
+            fieldpatch = fieldpatch.masked_fill(tmask6,0)
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
-        dlevpatch = torch.zeros(nbatch,plevs,dtype=dataset.dlev.dtype,device=dataset.dlev.device)
-        for i in range(nbatch):
-            dlevpatch[i] = dataset.dlev[levidx[i]]
+        dlevpatch = dataset.dlev[None,:].expand(nbatch,-1).contiguous()
         dtime = dataset.dtime
         dtimepatch = dtime[timegridclamped].contiguous()
         if timelag>0 and tmask is not None and tmask.any():
@@ -245,7 +244,7 @@ class PatchDataLoader:
         Purpose: Create PyTorch DataLoaders for all splits.
         Args:
         - splitdata (dict): dictionary from prepare method
-        - patchconfig (dict): patch configuration with radius, maxlevs, timelag
+        - patchconfig (dict): patch configuration with radius, levmode, timelag
         - uselocal (bool): whether to use local inputs
         - latrange (tuple[float,float]): latitude range
         - lonrange (tuple[float,float]): longitude range
@@ -266,7 +265,7 @@ class PatchDataLoader:
         for split,data in splitdata.items():
             datasets[split] = PatchDataset(
                 patchconfig['radius'],
-                patchconfig['maxlevs'],
+                patchconfig['levmode'],
                 patchconfig['timelag'],
                 data['field'],
                 data['darea'],

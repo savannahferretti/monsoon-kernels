@@ -179,7 +179,7 @@ if __name__=='__main__':
 
         patchconfig   = modelconfig['patch']
         uselocal      = modelconfig['uselocal']
-        currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
+        currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
 
         if currentconfig==cachedconfig:
             result = cachedresult
