@@ -155,10 +155,9 @@ class PatchDataset(torch.utils.data.Dataset):
         lonix = longrid[:,None,:].expand(-1,plats,-1)
         nbatch = latidx.shape[0]
         fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
-        for i in range(nbatch):
-            for ilev in range(plevs):
-                for itime in range(ptimes):
-                    fieldpatch[i,:,:,:,ilev,itime] = field[:,latix[i],lonix[i],levidx[i,ilev],timegridclamped[i,itime]]
+        for ilev in range(plevs):
+            for itime in range(ptimes):
+                fieldpatch[:,:,:,:,ilev,itime] = field[:,latix,lonix,levidx[:,ilev],timegridclamped[:,itime]]
         if timelag>0 and tmask is not None and tmask.any():
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
