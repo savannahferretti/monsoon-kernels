@@ -394,8 +394,8 @@ def test_vectorized_extraction():
                 lat_idx = latix[i, ilat, ilon].item()
                 lon_idx = lonix[i, ilat, ilon].item()
 
-                # Extract all times at once
-                time_indices = timegridclamped[i, :].tolist()
+                # Extract all times at once (keep as tensor for correct indexing)
+                time_indices = timegridclamped[i, :]
 
                 # VECTORIZED: Extract all (lev, time) at once instead of nested loops!
                 # This replaces: for ilev in range(plevs): for itime in range(ptimes):
