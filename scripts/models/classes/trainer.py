@@ -214,26 +214,15 @@ class Trainer:
             datapct = 100.0*dataloadtime/(dataloadtime+computetime)
             computepct = 100.0*computetime/(dataloadtime+computetime)
             wandb.log({
-                'Epoch':epoch,
                 'Training loss':trainloss,
                 'Validation loss':validloss,
-                'Learning rate':self.optimizer.param_groups[0]['lr'],
-                'Best validation loss':bestloss,
-                'Epoch time (min)':epochtime/60.0,
-                'Data loading time (min)':dataloadtime/60.0,
-                'Compute time (min)':computetime/60.0,
-                'Data loading (%)':datapct,
-                'Compute (%)':computepct})
+                'Learning rate':self.optimizer.param_groups[0]['lr']})
             logger.info(f'   Epoch {epoch}/{self.epochs}: train_loss={trainloss:.6f}, valid_loss={validloss:.6f}, lr={self.optimizer.param_groups[0]["lr"]:.2e}')
             logger.info(f'   Timing: epoch={epochtime/60:.1f}min, data={dataloadtime/60:.1f}min ({datapct:.0f}%), compute={computetime/60:.1f}min ({computepct:.0f}%)')
             if noimprove>=self.patience:
                 break
         duration = time.time()-starttime
-        wandb.run.summary.update({
-            'Best model at epoch':bestepoch,
-            'Best validation loss':bestloss,
-            'Training duration (min)':duration/60.0,
-            'Stopped early':noimprove>=self.patience})
+        wandb.run.summary.update({'Best validation loss':bestloss})
         logger.info(f'   Training complete: duration={duration/60:.1f}min, best_epoch={bestepoch}, best_loss={bestloss:.6f}')
         if beststate is not None:
             self.save_checkpoint(name,beststate,kind)
