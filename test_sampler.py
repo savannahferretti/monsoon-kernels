@@ -401,11 +401,17 @@ def test_vectorized_extraction():
                 # This replaces: for ilev in range(plevs): for itime in range(ptimes):
                 fieldpatch[i, :, ilat, ilon, :, :] = field[:, lat_idx, lon_idx, :, time_indices]
 
-    # Create validity mask (same as current implementation)
-    ps_center = ps[latix_c, lonix_c, timeix_c]
-    ps_expanded = ps_center[:, None, None, None, None].expand(nbatch, plats, plons, plevs, ptimes)
-    lev_expanded = lev[None, None, None, :, None].expand(nbatch, plats, plons, plevs, ptimes)
-    belowsurface = lev_expanded > ps_expanded
+    # Create validity mask (must use ps at EACH patch location, not just center!)
+    latixexp = latix[:, :, :, None].expand(nbatch, plats, plons, ptimes)
+    lonixexp = lonix[:, :, :, None].expand(nbatch, plats, plons, ptimes)
+    timeixexp = timegridclamped[:, None, None, :].expand(nbatch, plats, plons, ptimes)
+    pspatch = ps[latixexp, lonixexp, timeixexp]  # Shape: (nbatch, plats, plons, ptimes)
+
+    # Expand for level dimension
+    levselected = lev[None, None, None, None, :, None]  # (1, 1, 1, 1, plevs, 1)
+    pspatchexp = pspatch[:, None, :, :, None, :]  # (nbatch, 1, plats, plons, 1, ptimes)
+    belowsurface = levselected > pspatchexp
+    belowsurface = belowsurface.expand(nbatch, nfieldvars, plats, plons, plevs, ptimes)
     validmask = ~belowsurface
 
     # Apply temporal masking
@@ -415,9 +421,9 @@ def test_vectorized_extraction():
         fieldpatch = fieldpatch.masked_fill(tmask6, 0)
 
     # Set invalid to 0 and concatenate mask
-    validmask6 = validmask[:, None, :, :, :, :].expand(nbatch, nfieldvars, plats, plons, plevs, ptimes)
-    fieldpatch = fieldpatch.masked_fill(~validmask6, 0.0)
-    fieldpatch_vectorized = torch.cat([fieldpatch, validmask6.float()], dim=1)
+    # validmask already has shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+    fieldpatch = fieldpatch.masked_fill(~validmask, 0.0)
+    fieldpatch_vectorized = torch.cat([fieldpatch, validmask.float()], dim=1)
 
     time_vectorized = time.time() - start
 
