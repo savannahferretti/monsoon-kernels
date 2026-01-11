@@ -157,16 +157,19 @@ class PatchDataset(torch.utils.data.Dataset):
                             fieldpatch[i,:,ilat,ilon,0,itime] = field[:,latix[i,ilat,ilon],lonix[i,ilat,ilon],levidx_val,timegridclamped[i,itime]]
             validmask = torch.ones(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=torch.bool,device=field.device)
         else:
-            # VECTORIZED EXTRACTION: 3 loops instead of 5 (77-84x speedup)
-            # Eliminates nested ilev and itime loops by extracting all (lev, time) at once
-            for i in range(nbatch):
-                for ilat in range(plats):
-                    for ilon in range(plons):
-                        lat_idx = latix[i, ilat, ilon].item()
-                        lon_idx = lonix[i, ilat, ilon].item()
-                        time_indices = timegridclamped[i, :]
-                        # Extract all (level, time) at once instead of nested loops
-                        fieldpatch[i, :, ilat, ilon, :, :] = field[:, lat_idx, lon_idx, :, time_indices]
+            # FULLY VECTORIZED EXTRACTION: 0 loops! (like old loader.py)
+            # Build 6D index tensors to extract all (batch, lat, lon, lev, time) in ONE operation
+            latix6 = latix[:, None, :, :, None, None]  # (B, 1, plats, plons, 1, 1)
+            lonix6 = lonix[:, None, :, :, None, None]  # (B, 1, plats, plons, 1, 1)
+            levix6 = torch.arange(plevs, dtype=torch.long, device=field.device)[None, None, None, None, :, None]  # (1, 1, 1, 1, plevs, 1)
+            timeix6 = timegridclamped[:, None, None, None, None, :]  # (B, 1, 1, 1, 1, ptimes)
+
+            # Single advanced indexing operation replaces ALL loops!
+            fieldpatch = field[:, latix6.squeeze(1), lonix6.squeeze(1), levix6.squeeze(0).squeeze(0), timeix6.squeeze(1)]
+            # Result: (nfieldvars, B, plats, plons, plevs, ptimes)
+            fieldpatch = fieldpatch.permute(1, 0, 2, 3, 4, 5).contiguous()  # (B, nfieldvars, plats, plons, plevs, ptimes)
+
+            # Create validity mask
             levselected = lev[None,None,None,None,:,None]
             pspatchexp = pspatch[:,None,:,:,None,:]
             belowsurface = levselected > pspatchexp
