@@ -146,28 +146,24 @@ class PatchDataset(torch.utils.data.Dataset):
         pspatch = ps[latixexp,lonixexp,timeixexp]
         fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
         if levmode=='surface':
-            levidx = torch.zeros(nbatch,plats,plons,ptimes,dtype=torch.long,device=field.device)
-            for ilat in range(plats):
-                for ilon in range(plons):
-                    for itime in range(ptimes):
-                        pssample = pspatch[:,ilat,ilon,itime]
-                        for i in range(nbatch):
-                            validlevmask = lev <= pssample[i]
+            for i in range(nbatch):
+                for ilat in range(plats):
+                    for ilon in range(plons):
+                        for itime in range(ptimes):
+                            pssample = pspatch[i,ilat,ilon,itime]
+                            validlevmask = lev <= pssample
                             validindices = torch.where(validlevmask)[0]
-                            levidx[i,ilat,ilon,itime] = validindices[0] if len(validindices)>0 else 0
-            for ilat in range(plats):
-                for ilon in range(plons):
-                    for itime in range(ptimes):
-                        fieldpatch[:,:,ilat,ilon,0,itime] = field[:,latix[:,ilat,ilon],lonix[:,ilat,ilon],levidx[:,ilat,ilon,itime],timegridclamped[:,itime]]
+                            levidx_val = validindices[0] if len(validindices)>0 else 0
+                            fieldpatch[i,:,ilat,ilon,0,itime] = field[:,latix[i,ilat,ilon],lonix[i,ilat,ilon],levidx_val,timegridclamped[i,itime]]
             validmask = torch.ones(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=torch.bool,device=field.device)
         else:
-            levidx = torch.arange(nlevs,dtype=torch.long)
-            for ilev in range(plevs):
-                for itime in range(ptimes):
-                    timeix = timegridclamped[:,itime,None,None].expand(-1,plats,plons)
-                    fieldpatch[:,:,:,:,ilev,itime] = field[:,latix,lonix,levidx[ilev],timeix]
-            levselected = lev[levidx]
-            levselected = levselected[None,None,None,None,:,None]
+            for i in range(nbatch):
+                for ilat in range(plats):
+                    for ilon in range(plons):
+                        for ilev in range(plevs):
+                            for itime in range(ptimes):
+                                fieldpatch[i,:,ilat,ilon,ilev,itime] = field[:,latix[i,ilat,ilon],lonix[i,ilat,ilon],ilev,timegridclamped[i,itime]]
+            levselected = lev[None,None,None,None,:,None]
             pspatchexp = pspatch[:,None,:,:,None,:]
             belowsurface = levselected > pspatchexp
             belowsurface = belowsurface.expand(-1,nfieldvars,-1,-1,-1,-1)
