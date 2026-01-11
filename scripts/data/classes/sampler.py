@@ -146,15 +146,33 @@ class PatchDataset(torch.utils.data.Dataset):
         pspatch = ps[latixexp,lonixexp,timeixexp]
         fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
         if levmode=='surface':
+            # OPTIMIZED SURFACE MODE: Vectorize time dimension
+            # Extract all times at once, then find first valid level per location/time
             for i in range(nbatch):
                 for ilat in range(plats):
                     for ilon in range(plons):
-                        for itime in range(ptimes):
-                            pssample = pspatch[i,ilat,ilon,itime]
-                            validlevmask = lev <= pssample
-                            validindices = torch.where(validlevmask)[0]
-                            levidx_val = validindices[0] if len(validindices)>0 else 0
-                            fieldpatch[i,:,ilat,ilon,0,itime] = field[:,latix[i,ilat,ilon],lonix[i,ilat,ilon],levidx_val,timegridclamped[i,itime]]
+                        # Vectorize across time: extract pssample for all times at once
+                        pssample = pspatch[i, ilat, ilon, :]  # Shape: (ptimes,)
+
+                        # Find first valid level for each time step
+                        # lev shape: (nlevs,), pssample shape: (ptimes,)
+                        # Broadcast: lev[:, None] <= pssample[None, :] gives (nlevs, ptimes)
+                        validlevmask = lev[:, None] <= pssample[None, :]  # (nlevs, ptimes)
+
+                        # Find first valid level index for each time
+                        # argmax returns index of first True value
+                        levidx_val = validlevmask.to(torch.long).argmax(dim=0)  # (ptimes,)
+
+                        # Extract all times at once using the level indices
+                        lat_idx = latix[i, ilat, ilon]
+                        lon_idx = lonix[i, ilat, ilon]
+                        time_indices = timegridclamped[i, :]
+
+                        # Vectorized extraction across time dimension
+                        # field[:, lat_idx, lon_idx, levidx_val, time_indices]
+                        # We need to index with different level per time, so use advanced indexing
+                        fieldpatch[i, :, ilat, ilon, 0, :] = field[:, lat_idx, lon_idx, levidx_val, time_indices]
+
             validmask = torch.ones(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=torch.bool,device=field.device)
         else:
             # FULLY VECTORIZED EXTRACTION: 0 loops! (like old loader.py)
