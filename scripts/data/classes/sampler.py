@@ -158,6 +158,7 @@ class PatchDataset(torch.utils.data.Dataset):
                 for ilon in range(plons):
                     for itime in range(ptimes):
                         fieldpatch[:,:,ilat,ilon,0,itime] = field[:,latix[:,ilat,ilon],lonix[:,ilat,ilon],levidx[:,ilat,ilon,itime],timegridclamped[:,itime]]
+            validmask = torch.ones(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=torch.bool,device=field.device)
         else:
             levidx = torch.arange(16,dtype=torch.long)
             for ilev in range(plevs):
@@ -168,12 +169,11 @@ class PatchDataset(torch.utils.data.Dataset):
             pspatchexp = pspatch[:,None,:,:,None,:]
             belowsurface = levselected > pspatchexp
             belowsurface = belowsurface.expand(-1,nfieldvars,-1,-1,-1,-1)
-            fieldpatch = fieldpatch.masked_fill(belowsurface,float('nan'))
+            validmask = ~belowsurface
         if timelag>0 and tmask is not None and tmask.any():
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
-            fieldpatch = fieldpatch.masked_fill(tmask6,0)
-        validmask = ~torch.isnan(fieldpatch)
-        fieldpatch = torch.nan_to_num(fieldpatch,nan=0.0)
+            validmask = validmask & ~tmask6
+        fieldpatch = fieldpatch.masked_fill(~validmask,0.0)
         fieldpatch = torch.cat([fieldpatch,validmask.float()],dim=1)
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
