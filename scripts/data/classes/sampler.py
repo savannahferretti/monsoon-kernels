@@ -164,7 +164,8 @@ class PatchDataset(torch.utils.data.Dataset):
             levidx = torch.arange(nlevs,dtype=torch.long)
             for ilev in range(plevs):
                 for itime in range(ptimes):
-                    fieldpatch[:,:,:,:,ilev,itime] = field[:,latix,lonix,levidx[ilev],timegridclamped[:,itime]]
+                    timeix = timegridclamped[:,itime,None,None].expand(-1,plats,plons)
+                    fieldpatch[:,:,:,:,ilev,itime] = field[:,latix,lonix,levidx[ilev],timeix]
             levselected = lev[levidx]
             levselected = levselected[None,None,None,None,:,None]
             pspatchexp = pspatch[:,None,:,:,None,:]
