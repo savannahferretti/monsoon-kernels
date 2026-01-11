@@ -432,8 +432,23 @@ def test_vectorized_extraction():
     if torch.allclose(result_current['fieldpatch'], fieldpatch_vectorized, rtol=1e-5, atol=1e-7):
         print(f"   ✓ Results IDENTICAL - vectorization is correct!")
     else:
-        max_diff = (result_current['fieldpatch'] - fieldpatch_vectorized).abs().max()
-        print(f"   ⚠ Results differ by max {max_diff:.2e}")
+        diff = (result_current['fieldpatch'] - fieldpatch_vectorized).abs()
+        max_diff = diff.max()
+        mean_diff = diff.mean()
+        print(f"   ⚠ Results differ by max {max_diff:.2e}, mean {mean_diff:.2e}")
+
+        # Debug: Find where the max difference occurs
+        max_idx = (diff == max_diff).nonzero()[0]
+        print(f"   Debug: Max diff at index {max_idx.tolist()}")
+        print(f"   Current value: {result_current['fieldpatch'][tuple(max_idx)].item():.4f}")
+        print(f"   Vectorized value: {fieldpatch_vectorized[tuple(max_idx)].item():.4f}")
+
+        # Check if differences are only in data channels or also in mask
+        diff_data = diff[:, :nfieldvars, :, :, :, :]  # First half: data
+        diff_mask = diff[:, nfieldvars:, :, :, :, :]  # Second half: mask
+        print(f"   Max diff in data channels: {diff_data.max():.2e}")
+        print(f"   Max diff in mask channels: {diff_mask.max():.2e}")
+
         if max_diff < 1e-5:
             print(f"   ✓ Difference is negligible (likely floating point)")
         else:
