@@ -117,6 +117,7 @@ def test_surface_mode():
 
 def test_column_mode():
     """Test column mode extraction with realistic batch size."""
+    import time
     print("\nTesting levmode='column' with batch_size=500...")
     data = create_realistic_mock_data()
 
@@ -149,7 +150,10 @@ def test_column_mode():
     print(f"  Testing batch extraction with {len(batch)} samples...")
 
     try:
+        start_time = time.time()
         result = PatchDataset.collate(batch, dataset)
+        batch_time = time.time() - start_time
+
         print(f"  ✓ Column mode successful")
         nlevs = data['lev'].shape[0]
         print(f"    fieldpatch shape: {result['fieldpatch'].shape}")
@@ -177,6 +181,18 @@ def test_column_mode():
             print(f"  ✓ {invalid_frac*100:.1f}% of data marked invalid (below surface)")
 
         print(f"  ✓ Data and mask channels verified")
+
+        # Performance estimate
+        print(f"\n  Performance:")
+        print(f"    Batch extraction time: {batch_time:.3f}s for {len(batch)} samples")
+        print(f"    Throughput: {len(batch)/batch_time:.1f} samples/sec")
+
+        # Estimate for full training dataset (21.5M samples, 43115 batches)
+        training_samples = 21557214
+        training_batches = 43115
+        estimated_time = batch_time * training_batches
+        print(f"    Estimated time for {training_samples:,} training samples ({training_batches:,} batches):")
+        print(f"      {estimated_time/60:.1f} minutes = {estimated_time/3600:.2f} hours per epoch")
 
     except Exception as e:
         print(f"  ✗ Column mode failed: {e}")
