@@ -170,6 +170,9 @@ class ParametricKernelLayer(torch.nn.Module):
             Args:
             - nfieldvars (int): number of predictor fields
             - nkernels (int): number of kernels to learn per predictor field
+            Notes:
+            - Implements k^(G)_s(s; μ_s, σ_s) = exp(-d(s,μ_s)²/(2σ_s²)) / normalization
+            - Parameters μ (mean) and σ (std) are learned in normalized coordinate space [-1, 1]
             '''
             super().__init__()
             self.mean   = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
@@ -177,16 +180,65 @@ class ParametricKernelLayer(torch.nn.Module):
 
         def forward(self,length,device):
             '''
-            Purpose: Evaluate a Gaussian kernel along a symmetric coordinate in [-1,1].
+            Purpose: Evaluate a Gaussian kernel along a coordinate in [-1,1].
             Args:
             - length (int): number of points along the axis
             - device (str | torch.device): device to use
             Returns:
             - torch.Tensor: Gaussian kernel values with shape (nfieldvars, nkernels, length)
+            Notes:
+            - Uses normalized coordinates s ∈ [-1, 1]
+            - For vertical: -1 ≈ top of atmosphere, +1 ≈ surface
+            - Distance: d(s, μ_s) = |s - μ_s|
             '''
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
             std = torch.exp(self.logstd)
             kernel1d = torch.exp(-0.5*((coord[None,None,:]-self.mean[...,None])/std[...,None])**2)
+            return kernel1d
+
+    class TopHatKernel(torch.nn.Module):
+
+        def __init__(self,nfieldvars,nkernels):
+            '''
+            Purpose: Initialize top-hat (uniform) kernel parameters along one dimension.
+            Args:
+            - nfieldvars (int): number of predictor fields
+            - nkernels (int): number of kernels to learn per predictor field
+            Notes:
+            - Implements k^(TH)_s(s; s₁, s₂) = I(s ∈ [s₁, s₂]) / normalization
+            - Parameters s₁ and s₂ are learned bounds in normalized coordinate space [-1, 1]
+            - Assigns uniform weight within [s₁, s₂], zero outside
+            '''
+            super().__init__()
+            # Initialize bounds to cover middle 50% of domain
+            self.lower = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)), -0.5))
+            self.upper = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)), 0.5))
+
+        def forward(self,length,device):
+            '''
+            Purpose: Evaluate a top-hat kernel along a coordinate in [-1,1].
+            Args:
+            - length (int): number of points along the axis
+            - device (str | torch.device): device to use
+            Returns:
+            - torch.Tensor: top-hat kernel values with shape (nfieldvars, nkernels, length)
+            Notes:
+            - Uses normalized coordinates s ∈ [-1, 1]
+            - For vertical: defines pressure layer between p₁ and p₂
+            - Indicator function: I(s ∈ [s₁, s₂])
+            '''
+            coord = torch.linspace(-1.0,1.0,steps=length,device=device)
+
+            # Ensure lower < upper by using sorted bounds
+            s1 = torch.min(self.lower, self.upper)
+            s2 = torch.max(self.lower, self.upper)
+
+            # Indicator function: 1 if s ∈ [s₁, s₂], 0 otherwise
+            kernel1d = ((coord[None,None,:] >= s1[...,None]) &
+                       (coord[None,None,:] <= s2[...,None])).float()
+
+            # Add small epsilon to avoid all-zero kernels
+            kernel1d = kernel1d + 1e-8
             return kernel1d
 
     class ExponentialKernel(torch.nn.Module):
@@ -197,31 +249,41 @@ class ParametricKernelLayer(torch.nn.Module):
             Args:
             - nfieldvars (int): number of predictor fields
             - nkernels (int): number of kernels to learn per predictor field
+            Notes:
+            - Implements k^(EXP)(τ; τ₀) = exp(-τ/τ₀) · I(τ ∈ [0, τ_max]) / normalization
+            - Parameter τ₀ (timescale) controls decay rate
+            - For time: τ = t₀ - t (lag from present)
+            - For vertical: τ = distance from surface or TOA
             '''
             super().__init__()
             self.logtau = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
 
         def forward(self,length,device):
             '''
-            Purpose: Evaluate an exponential kernel along non-negative coordinate [0,1,2,...].
+            Purpose: Evaluate an exponential kernel along a lag coordinate [0, τ_max].
             Args:
             - length (int): number of points along the axis
             - device (str | torch.device): device to use
             Returns:
             - torch.Tensor: exponential kernel values with shape (nfieldvars, nkernels, length)
+            Notes:
+            - Uses lag coordinates τ ∈ [0, 1, 2, ..., length-1]
+            - For time: τ=0 is present, τ increasing is further into past
+            - For vertical: τ=0 could be surface, τ increasing is upward
+            - Decay timescale τ₀ = exp(logtau)
             '''
-            coord = torch.arange(length,device=device)
+            coord = torch.arange(length,device=device,dtype=torch.float32)
             tau = torch.exp(self.logtau)+1e-4
             kernel1d = torch.exp(-coord[None,None,:]/tau[...,None])
             return kernel1d
 
     def __init__(self,nfieldvars,nkernels,kerneldict):
         '''
-        Purpose: Initialize smooth parametric kernels along selected dimensions.
+        Purpose: Initialize parametric kernels along selected dimensions.
         Args:
         - nfieldvars (int): number of predictor fields
         - nkernels (int): number of kernels to learn per predictor field
-        - kerneldict (dict[str,str]): mapping of dimensions the kernel varies along to a function ('gaussian' | 'exponential')
+        - kerneldict (dict[str,str]): mapping of dimensions to kernel type ('gaussian' | 'tophat' | 'exponential')
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
@@ -235,10 +297,12 @@ class ParametricKernelLayer(torch.nn.Module):
         for dim,function in self.kerneldict.items():
             if function=='gaussian':
                 self.functions[dim] = self.GaussianKernel(self.nfieldvars,self.nkernels)
+            elif function=='tophat':
+                self.functions[dim] = self.TopHatKernel(self.nfieldvars,self.nkernels)
             elif function=='exponential':
                 self.functions[dim] = self.ExponentialKernel(self.nfieldvars,self.nkernels)
             else:
-                raise ValueError(f'Unknown function type `{function}`; must be either `gaussian` or `exponential`')
+                raise ValueError(f'Unknown function type `{function}`; must be `gaussian`, `tophat`, or `exponential`')
 
     def get_weights(self,dareapatch,dlevfull,dtimepatch,device):
         '''
