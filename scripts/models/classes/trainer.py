@@ -214,7 +214,7 @@ class Trainer:
             datapct = 100.0*dataloadtime/(dataloadtime+computetime)
             computepct = 100.0*computetime/(dataloadtime+computetime)
             wandb.log({
-                'epoch': epoch,
+                'Epoch': epoch,
                 'Training loss':trainloss,
                 'Validation loss':validloss,
                 'Learning rate':self.optimizer.param_groups[0]['lr']})
