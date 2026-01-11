@@ -172,6 +172,9 @@ class PatchDataset(torch.utils.data.Dataset):
         if timelag>0 and tmask is not None and tmask.any():
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
+        validmask = ~torch.isnan(fieldpatch)
+        fieldpatch = torch.nan_to_num(fieldpatch,nan=0.0)
+        fieldpatch = torch.cat([fieldpatch,validmask.float()],dim=1)
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
         dlevpatch = dataset.dlev[None,:].expand(nbatch,-1).contiguous()

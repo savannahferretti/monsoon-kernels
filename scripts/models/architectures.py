@@ -56,12 +56,11 @@ class BaselineNN(torch.nn.Module):
         '''
         Purpose: Forward pass through BaselineNN.
         Args:
-        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, 2*nfieldvars, plats, plons, plevs, ptimes) where first half are data channels and second half are validity masks
         - localvalues (torch.Tensor | None): local input values with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
-        fieldpatch = torch.nan_to_num(fieldpatch,nan=0.0)
         fieldpatch = fieldpatch.flatten(1)
         if self.uselocal:
             if localvalues is None:
@@ -109,7 +108,7 @@ class KernelNN(torch.nn.Module):
         '''
         Purpose: Forward pass through KernelNN.
         Args:
-        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, 2*nfieldvars, plats, plons, plevs, ptimes) where first half are data channels and second half are validity masks
         - dareapatch (torch.Tensor): horizontal area weights patch with shape (nbatch, plats, plons)
         - dlevpatch (torch.Tensor): vertical thickness weights patch with shape (nbatch, plevs)
         - dtimepatch (torch.Tensor): time step weights patch with shape (nbatch, ptimes)
