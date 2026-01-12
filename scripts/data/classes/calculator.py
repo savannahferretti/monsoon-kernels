@@ -161,12 +161,12 @@ class DataCalculator:
         Purpose: Compute separable quadrature weights for numerical integration over a 4D grid. For each dimension 
         ('lat', 'lon', 'lev', 'time'), centered finite differences estimate the spacing between adjacent grid points. 
         These spacings are combined into area weights ΔA (m²) accounting for spherical geometry, vertical thickness 
-        weights Δp (hPa) for pressure levels, and temporal weights Δt (s) for constant-cadence time steps.
+        weights Δp (hPa) for pressure levels, and temporal weights Δt (hr) for constant-cadence time steps.
         Args:
         - refda (xr.DataArray): reference DataArray with dimensions 'lat', 'lon', 'lev', and 'time'
         - rearth (float): Earth's radius in meters (defaults to 6,371,000 m)
         Returns:
-        - tuple(xr.DataArray, xr.DataArray, xr.DataArray): quadrature weights for ΔA (m²), Δp (hPa), and Δt (s)
+        - tuple(xr.DataArray, xr.DataArray, xr.DataArray): quadrature weights for ΔA (m²), Δp (hPa), and Δt (hr)
         '''
         lats  = np.deg2rad(refda.lat.values)
         lons  = np.deg2rad(refda.lon.values)
@@ -176,7 +176,7 @@ class DataCalculator:
         dlon  = np.abs(np.concatenate([[lons[1]-lons[0]],0.5*(lons[2:]-lons[:-2]),[lons[-1]-lons[-2]]]))
         dareavalues = (rearth**2*np.cos(lats)*dlat)[:,None]*dlon[None,:]
         dlevvalues  = np.abs(np.concatenate([[levs[1]-levs[0]],0.5*(levs[2:]-levs[:-2]),[levs[-1]-levs[-2]]]))
-        dtimevalues = np.full(times.size,float(np.median(np.diff(times).astype('timedelta64[s]').astype(float))))
+        dtimevalues = np.full(times.size,float(np.median(np.diff(times).astype('timedelta64[s]').astype(float))))/3600.0
         darea = xr.DataArray(dareavalues.astype(np.float32),dims=('lat','lon'),coords={'lat':refda.lat,'lon':refda.lon})
         dlev  = xr.DataArray(dlevvalues.astype(np.float32),dims=('lev',),coords={'lev':refda.lev})
         dtime = xr.DataArray(dtimevalues.astype(np.float32),dims=('time',),coords={'time':refda.time})
