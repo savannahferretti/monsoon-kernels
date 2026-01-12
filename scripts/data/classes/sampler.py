@@ -192,11 +192,11 @@ class PatchDataset(torch.utils.data.Dataset):
             fieldpatch = fieldpatch.permute(1, 0, 2, 3, 4, 5).contiguous()  # (B, nfieldvars, plats, plons, plevs, ptimes)
 
             # Create validity mask (single mask for all fields - they share the same grid!)
-            levselected = lev[None,None,None,None,:,None]
-            pspatchexp = pspatch[:,None,:,:,None,:]
-            belowsurface = levselected > pspatchexp
+            levselected = lev[None,None,None,None,:,None]  # (1, 1, 1, 1, plevs, 1)
+            pspatchexp = pspatch[:,None,:,:,None,:]  # (nbatch, 1, plats, plons, 1, ptimes)
+            belowsurface = levselected > pspatchexp  # Broadcasts to (nbatch, 1, plats, plons, plevs, ptimes)
             # Keep as single mask: (nbatch, 1, plats, plons, plevs, ptimes)
-            validmask = (~belowsurface).unsqueeze(1)
+            validmask = ~belowsurface  # Already has correct shape, don't unsqueeze!
         if timelag>0 and tmask is not None and tmask.any():
             # Expand tmask to match fieldpatch dimensions for data channels
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
