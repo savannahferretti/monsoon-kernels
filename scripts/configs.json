@@ -99,6 +99,27 @@
          "patch":{"radius":0,"levmode":"column","timelag":0},
          "uselocal":true,
          "nkernels":1,
-         "kerneldict":{"lev":"cosine"}}
+         "kerneldict":{"lev":"cosine"}},
+    {"name":"kernel_mixture_vertical",
+         "kind":"parametric",
+         "description":"($\\mathbf{x}_0$, $\\mathit{p}^\\mathrm{MG}$, $\\mathit{t}_0$)",
+         "patch":{"radius":0,"levmode":"column","timelag":0},
+         "uselocal":true,
+         "nkernels":1,
+         "kerneldict":{"lev":"mixture"}},
+    {"name":"kernel_bidirectional_vertical",
+         "kind":"parametric",
+         "description":"($\\mathbf{x}_0$, $\\mathit{p}^\\mathrm{BEXP}$, $\\mathit{t}_0$)",
+         "patch":{"radius":0,"levmode":"column","timelag":0},
+         "uselocal":true,
+         "nkernels":1,
+         "kerneldict":{"lev":"bidirectional"}},
+    {"name":"kernel_perfield_vertical",
+         "kind":"parametric",
+         "description":"($\\mathbf{x}_0$, $\\mathit{p}^\\mathrm{mixed}$, $\\mathit{t}_0$)",
+         "patch":{"radius":0,"levmode":"column","timelag":0},
+         "uselocal":true,
+         "nkernels":1,
+         "kerneldict":{"lev":["bidirectional","gaussian","cosine"]}}
   ]
 }
