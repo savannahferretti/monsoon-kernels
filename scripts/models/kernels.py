@@ -335,7 +335,10 @@ class ParametricKernelLayer(torch.nn.Module):
         for ax,dim in enumerate(('lat','lon','lev','time'),start=2):
             if dim in self.kerneldims:
                 kernel1d = self.functions[dim](kernel.shape[ax],device)
-                view = [1,1]+[kernel.shape[ax] if i==ax-2 else 1 for i in range(4)]
+                # kernel1d has shape (nfieldvars, nkernels, length)
+                # Need to reshape to (nfieldvars, nkernels, 1, 1, 1, 1) with length at position ax
+                view = [kernel.shape[0], kernel.shape[1], 1, 1, 1, 1]
+                view[ax] = kernel.shape[ax]
                 kernel = kernel*kernel1d.view(*view)
         self.weights = KernelModule.normalize(kernel,dareapatch0,self.dlevfull,dtimepatch0,self.kerneldims)
         return self.weights
