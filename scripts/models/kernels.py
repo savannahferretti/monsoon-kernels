@@ -331,10 +331,12 @@ class ParametricKernelLayer(torch.nn.Module):
             - nfieldvars (int): number of predictor fields
             - nkernels (int): number of kernels to learn per predictor field
             Notes:
-            - Implements k^(MG)_s(s; μ₁, σ₁, μ₂, σ₂, w) = w·N(μ₁,σ₁²) + (1-w)·N(μ₂,σ₂²)
-            - Two Gaussians with learnable centers (μ₁, μ₂), widths (σ₁, σ₂), and mixing weight w
-            - Mixing weight w can be positive or negative to allow constructive/destructive interference
-            - Useful for bimodal patterns (e.g., boundary layer + upper troposphere)
+            - Implements k^(MG)_s(s; μ₁, σ₁, μ₂, σ₂, w₁, w₂) = w₁·N(μ₁,σ₁²) + w₂·N(μ₂,σ₂²)
+            - Two Gaussians with learnable centers (μ₁, μ₂), widths (σ₁, σ₂), and independent weights (w₁, w₂)
+            - Weights are unconstrained - can be positive or negative for full flexibility:
+              * w₁ > 0, w₂ > 0: two positive contributions (e.g., surface + lower free-troposphere)
+              * w₁ > 0, w₂ < 0: positive + negative (e.g., boundary layer positive, free-troposphere negative)
+            - Useful for bimodal patterns or opposing contributions at different levels
             '''
             super().__init__()
             # Initialize two Gaussian components with different centers
@@ -342,8 +344,9 @@ class ParametricKernelLayer(torch.nn.Module):
             self.center2 = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)), 0.5))
             self.logwidth1 = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
             self.logwidth2 = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
-            # Mixing weight (unconstrained - can be negative for destructive interference)
-            self.mixweight = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
+            # Two independent weights (unconstrained - both can be positive or negative)
+            self.weight1 = torch.nn.Parameter(torch.ones(int(nfieldvars),int(nkernels)))
+            self.weight2 = torch.nn.Parameter(torch.ones(int(nfieldvars),int(nkernels)))
 
         def forward(self,length,device):
             '''
@@ -355,8 +358,9 @@ class ParametricKernelLayer(torch.nn.Module):
             - torch.Tensor: mixture kernel values with shape (nfieldvars, nkernels, length)
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
-            - Combines two Gaussian bumps with learnable mixing weight
-            - Allows bimodal patterns (two peaks) or difference-of-Gaussians (center-surround)
+            - Combines two Gaussian bumps with independent learnable weights
+            - Allows positive/positive, positive/negative, or any combination
+            - Examples: two peaks, center-surround, or single peak with negative surround
             '''
             coord = torch.linspace(-1.0, 1.0, steps=length, device=device)
             width1 = torch.exp(self.logwidth1).clamp(min=0.1, max=2.0)
@@ -368,9 +372,8 @@ class ParametricKernelLayer(torch.nn.Module):
             gauss1 = torch.exp(-dist1**2 / (2 * width1[...,None]**2))
             gauss2 = torch.exp(-dist2**2 / (2 * width2[...,None]**2))
 
-            # Mix with learnable weight (can be negative)
-            mix = torch.sigmoid(self.mixweight[...,None])  # Constrain to [0,1] for stability
-            kernel1d = mix * gauss1 + (1 - mix) * gauss2
+            # Combine with independent weights (both can be positive or negative)
+            kernel1d = self.weight1[...,None] * gauss1 + self.weight2[...,None] * gauss2
 
             # Add small epsilon to avoid all-zero kernels
             kernel1d = kernel1d + 1e-8
