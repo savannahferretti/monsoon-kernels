@@ -86,7 +86,7 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
         logger.error(f'   Checkpoint not found: {filepath}')
         return None
     patchshape = result['geometry'].shape()
-    nfieldvars = len(fieldvars)  # Only data fields (validity mask not included as channel)
+    nfieldvars = len(fieldvars) + 1  # Data fields + validity mask channel
     nlocalvars = len(localvars)
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
     if hasattr(model,"intkernel") and hasattr(model.intkernel,"kernel") and (model.intkernel.kernel is None):
