@@ -1,0 +1,67 @@
+Training model: kernel_mixture_vertical
+12:47:09 - INFO - Spinning up...
+12:47:10 - INFO - Preparing data splits...
+12:49:38 - INFO - Common domain constraints: maxradius=1, maxtimelag=6
+12:49:38 - INFO - Training `kernel_mixture_vertical`...
+12:50:01 - INFO -    Training samples: 21557214, Validation samples: 4308318
+12:50:01 - INFO -    Training batches: 43115, Validation batches: 8617
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260112_125002-s3r28wgb
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run kernel_mixture_vertical
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/s3r28wgb
+12:54:18 - INFO -    Epoch 1/20: train_loss=0.704399, valid_loss=0.584490, lr=5.00e-04
+12:54:18 - INFO -    Timing: epoch=3.8min, data=0.2min (5%), compute=3.6min (95%)
+12:58:26 - INFO -    Epoch 2/20: train_loss=0.689248, valid_loss=0.575175, lr=5.00e-04
+12:58:26 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:02:32 - INFO -    Epoch 3/20: train_loss=0.686501, valid_loss=0.572418, lr=5.00e-04
+13:02:32 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:06:39 - INFO -    Epoch 4/20: train_loss=0.685131, valid_loss=0.572291, lr=5.00e-04
+13:06:39 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:10:44 - INFO -    Epoch 5/20: train_loss=0.684241, valid_loss=0.573540, lr=5.00e-04
+13:10:44 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:14:50 - INFO -    Epoch 6/20: train_loss=0.683653, valid_loss=0.578540, lr=5.00e-04
+13:14:50 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:18:54 - INFO -    Epoch 7/20: train_loss=0.683184, valid_loss=0.570667, lr=5.00e-04
+13:18:54 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:22:59 - INFO -    Epoch 8/20: train_loss=0.682691, valid_loss=0.569743, lr=5.00e-04
+13:22:59 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:27:05 - INFO -    Epoch 9/20: train_loss=0.682127, valid_loss=0.571839, lr=5.00e-04
+13:27:05 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:31:11 - INFO -    Epoch 10/20: train_loss=0.681117, valid_loss=0.572239, lr=5.00e-04
+13:31:11 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:35:17 - INFO -    Epoch 11/20: train_loss=0.680416, valid_loss=0.565602, lr=5.00e-04
+13:35:17 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.6min (95%)
+13:39:26 - INFO -    Epoch 12/20: train_loss=0.679720, valid_loss=0.569582, lr=5.00e-04
+13:39:26 - INFO -    Timing: epoch=3.8min, data=0.2min (5%), compute=3.6min (95%)
+13:43:31 - INFO -    Epoch 13/20: train_loss=0.679246, valid_loss=0.569163, lr=5.00e-04
+13:43:31 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:47:38 - INFO -    Epoch 14/20: train_loss=0.678876, valid_loss=0.570058, lr=2.50e-04
+13:47:38 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:51:44 - INFO -    Epoch 15/20: train_loss=0.676776, valid_loss=0.566062, lr=2.50e-04
+13:51:44 - INFO -    Timing: epoch=3.7min, data=0.2min (5%), compute=3.5min (95%)
+13:51:44 - INFO -    Training complete: duration=61.7min, best_epoch=11, best_loss=0.565602
+13:51:44 - INFO -       Attempting to save kernel_mixture_vertical.pth...
+13:51:44 - INFO -          File write successful
+wandb: uploading history steps 14-14, summary, console lines 28-32
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           Epoch ▁▁▂▃▃▃▄▅▅▅▆▇▇▇█
+wandb:   Learning rate █████████████▁▁
+wandb:   Training loss █▄▃▃▃▃▃▂▂▂▂▂▂▂▁
+wandb: Validation loss █▅▄▃▄▆▃▃▃▃▁▂▂▃▁
+wandb: 
+wandb: Run summary:
+wandb: Best validation loss 0.5656
+wandb:                Epoch 15
+wandb:        Learning rate 0.00025
+wandb:        Training loss 0.67678
+wandb:      Validation loss 0.56606
+wandb: 
+wandb: 🚀 View run kernel_mixture_vertical at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/s3r28wgb
+wandb: ⭐️ View project at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260112_125002-s3r28wgb/logs

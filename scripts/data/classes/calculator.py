@@ -82,7 +82,7 @@ class DataCalculator:
         targetlats = np.arange(self.latrange[0]-1.0,self.latrange[1]+2.0,1.0)
         targetlons = np.arange(self.lonrange[0]-1.0,self.lonrange[1]+2.0,1.0)
         targetgrid = xr.Dataset({'lat':(['lat'],targetlats),'lon':(['lon'],targetlons)})
-        regridder  = xesmf.Regridder(da,targetgrid,method='conservative')
+        regridder  = xesmf.Regridder(da,targetgrid,method='bilinear')
         da = regridder(da,keep_attrs=True)
         return da
 

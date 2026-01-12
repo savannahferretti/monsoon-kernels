@@ -43,8 +43,6 @@ if __name__=='__main__':
     darea,dlev,dtime = calculator.calc_quadrature_weights(t)
     logger.info('Creating datasets...')
     dslist = [
-        calculator.create_dataset(t,'t','Air temperature','K'),
-        calculator.create_dataset(q,'q','Specific humidity','kg/kg'),
         calculator.create_dataset(rh,'rh','Relative humidity','%'),
         calculator.create_dataset(thetae,'thetae','Equivalent potential temperature','K'),
         calculator.create_dataset(thetaestar,'thetaestar','Saturated equivalent potential temperature','K'),
