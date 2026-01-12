@@ -277,50 +277,46 @@ class ParametricKernelLayer(torch.nn.Module):
             kernel1d = torch.exp(-coord[None,None,:]/tau[...,None])
             return kernel1d
 
-    class RaisedCosineKernel(torch.nn.Module):
+    class CosineKernel(torch.nn.Module):
 
         def __init__(self,nfieldvars,nkernels):
             '''
-            Purpose: Initialize raised cosine (Hann window) kernel parameters along one dimension.
+            Purpose: Initialize oscillating cosine kernel parameters along one dimension.
             Args:
             - nfieldvars (int): number of predictor fields
             - nkernels (int): number of kernels to learn per predictor field
             Notes:
-            - Implements k^(RC)_s(s; μ_s, w_s) = 0.5(1 + cos(π(s-μ_s)/w_s)) · I(|s-μ_s| ≤ w_s) / normalization
-            - Parameters μ (center) and w (half-width) are learned in normalized coordinate space [-1, 1]
-            - Smooth bell-shaped bump like Gaussian but with compact support like top-hat
-            - Also known as Hann window in signal processing
+            - Implements k^(C)_s(s; f, φ) = 0.5(1 + cos(2πfs + φ))
+            - Parameters f (frequency) and φ (phase) are learned in normalized coordinate space [-1, 1]
+            - Creates oscillating patterns with learnable number of cycles and phase offset
+            - Unlike raised cosine (single bump), this has multiple peaks and valleys
             '''
             super().__init__()
-            self.center = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
-            self.logwidth = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))  # log(width) for positivity
+            self.logfreq = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))  # log(frequency) for positivity
+            self.phase = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))     # phase offset
 
         def forward(self,length,device):
             '''
-            Purpose: Evaluate a raised cosine kernel along a coordinate in [-1,1].
+            Purpose: Evaluate an oscillating cosine kernel along a coordinate in [-1,1].
             Args:
             - length (int): number of points along the axis
             - device (str | torch.device): device to use
             Returns:
-            - torch.Tensor: raised cosine kernel values with shape (nfieldvars, nkernels, length)
+            - torch.Tensor: oscillating cosine kernel values with shape (nfieldvars, nkernels, length)
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
-            - For vertical: creates smooth bump centered at pressure level μ with width w
-            - Smooth transitions (C¹ continuous), unlike top-hat (discontinuous)
-            - Compact support [μ-w, μ+w], unlike Gaussian (infinite support)
+            - For vertical: creates repeating oscillatory pattern with learnable frequency and phase
+            - Frequency determines number of complete cycles over the domain
+            - Phase shifts the oscillation pattern
             '''
-            coord = torch.linspace(-1.0,1.0,steps=length,device=device)
-            width = torch.exp(self.logwidth).clamp(min=0.1, max=2.0)  # Constrain width to reasonable range
+            coord = torch.linspace(-1.0, 1.0, steps=length, device=device)
+            freq = torch.exp(self.logfreq).clamp(min=0.5, max=10.0)  # Constrain to reasonable frequency range
 
-            # Distance from center
-            dist = (coord[None,None,:] - self.center[...,None]).abs()
-
-            # Raised cosine: 0.5 * (1 + cos(π * dist / width)) for dist ≤ width, 0 elsewhere
-            kernel1d = torch.where(
-                dist <= width[...,None],
-                0.5 * (1 + torch.cos(torch.pi * dist / width[...,None])),
-                torch.zeros_like(dist)
-            )
+            # Oscillating cosine: 0.5 * (1 + cos(2π * f * s + φ))
+            # This gives values in [0, 1] with multiple oscillations
+            kernel1d = 0.5 * (1.0 + torch.cos(
+                2.0 * torch.pi * freq[..., None] * coord[None, None, :] + self.phase[..., None]
+            ))
 
             # Add small epsilon to avoid all-zero kernels
             kernel1d = kernel1d + 1e-8
@@ -352,7 +348,7 @@ class ParametricKernelLayer(torch.nn.Module):
             elif function=='exponential':
                 self.functions[dim] = self.ExponentialKernel(self.nfieldvars,self.nkernels)
             elif function=='cosine':
-                self.functions[dim] = self.RaisedCosineKernel(self.nfieldvars,self.nkernels)
+                self.functions[dim] = self.CosineKernel(self.nfieldvars,self.nkernels)
             else:
                 raise ValueError(f'Unknown function type `{function}`; must be `gaussian`, `tophat`, `exponential`, or `cosine`')
 
