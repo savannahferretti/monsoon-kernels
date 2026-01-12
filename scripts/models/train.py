@@ -56,7 +56,7 @@ def initialize(name,modelconfig,result,device,fieldvars,localvars):
     - torch.nn.Module: initialized model instance on device
     '''
     patchshape = result['geometry'].shape()
-    nfieldvars = len(fieldvars) + 1  # data fields + single validity mask
+    nfieldvars = len(fieldvars)  # Only data fields (validity mask not included as channel)
     nlocalvars = len(localvars)
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
     return model.to(device)

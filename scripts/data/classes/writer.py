@@ -100,23 +100,15 @@ class PredictionWriter:
             kerneldims = tuple(kerneldims)
             alldims    = ['field','member','lat','lon','lev','time']
 
-            # Handle field dimension with validity mask
-            nfields_in_data = data.shape[0]
-            nfields_original = len(fieldvars)
-            if nfields_in_data == nfields_original + 1:
-                # We have data fields + single validity mask
-                extended_fieldvars = list(fieldvars) + ['validity_mask']
-            else:
-                extended_fieldvars = fieldvars
-
+            # Field names are just the predictor variables (no mask channel)
             if nonparam:
                 keep    = ('field','member')
                 dims0   = ['field','member']
-                coords0 = {'field':extended_fieldvars,'member':np.arange(data.shape[1])}
+                coords0 = {'field':fieldvars,'member':np.arange(data.shape[1])}
             else:
                 keep    = ('field',)
                 dims0   = ['field']
-                coords0 = {'field':extended_fieldvars}
+                coords0 = {'field':fieldvars}
             dims1   = [dim for dim in ('lat','lon','lev','time') if dim in kerneldims]
             indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
             arr     = data[tuple(indexer)]

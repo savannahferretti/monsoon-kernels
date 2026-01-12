@@ -206,8 +206,8 @@ class PatchDataset(torch.utils.data.Dataset):
             validmask = validmask.masked_fill(tmask_validity, 0.0)
         # Mask invalid data to 0 using broadcasting (single validmask broadcasts to all field channels)
         fieldpatch = fieldpatch.masked_fill(~validmask.expand(-1,nfieldvars,-1,-1,-1,-1), 0.0)
-        # Concatenate single validity mask as 4th channel
-        fieldpatch = torch.cat([fieldpatch, validmask.float()], dim=1)
+        # Note: We don't include the validity mask as a separate channel
+        # The mask has already been applied by setting invalid data to 0
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
         dlevpatch = dataset.dlev[None,:].expand(nbatch,-1).contiguous()
