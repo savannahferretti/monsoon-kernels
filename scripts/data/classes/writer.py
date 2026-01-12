@@ -99,14 +99,24 @@ class PredictionWriter:
                 raise ValueError('`kerneldims` required for weight formatting')
             kerneldims = tuple(kerneldims)
             alldims    = ['field','member','lat','lon','lev','time']
+
+            # Handle doubled field dimension (data + mask channels)
+            nfields_in_data = data.shape[0]
+            nfields_original = len(fieldvars)
+            if nfields_in_data == nfields_original * 2:
+                # We have doubled fields: data + mask
+                extended_fieldvars = list(fieldvars) + [f'{var}_mask' for var in fieldvars]
+            else:
+                extended_fieldvars = fieldvars
+
             if nonparam:
                 keep    = ('field','member')
                 dims0   = ['field','member']
-                coords0 = {'field':fieldvars,'member':np.arange(data.shape[1])}
+                coords0 = {'field':extended_fieldvars,'member':np.arange(data.shape[1])}
             else:
                 keep    = ('field',)
                 dims0   = ['field']
-                coords0 = {'field':fieldvars}
+                coords0 = {'field':extended_fieldvars}
             dims1   = [dim for dim in ('lat','lon','lev','time') if dim in kerneldims]
             indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
             arr     = data[tuple(indexer)]
