@@ -176,7 +176,8 @@ class PatchDataset(torch.utils.data.Dataset):
             # Permute to (nbatch, nfieldvars, plats, plons, ptimes) and add plevs=1 dimension
             fieldpatch = fieldpatch_temp.permute(1, 0, 2, 3, 4).unsqueeze(4)  # (nbatch, nfieldvars, plats, plons, 1, ptimes)
 
-            validmask = torch.ones(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=torch.bool,device=field.device)
+            # Surface mode: all data is valid (single mask channel)
+            validmask = torch.ones(nbatch, 1, plats, plons, plevs, ptimes, dtype=torch.bool, device=field.device)
         else:
             # FULLY VECTORIZED EXTRACTION: 0 loops! (like old loader.py)
             # Build 6D index tensors to extract all (batch, lat, lon, lev, time) in ONE operation
@@ -190,17 +191,23 @@ class PatchDataset(torch.utils.data.Dataset):
             # Result: (nfieldvars, B, plats, plons, plevs, ptimes)
             fieldpatch = fieldpatch.permute(1, 0, 2, 3, 4, 5).contiguous()  # (B, nfieldvars, plats, plons, plevs, ptimes)
 
-            # Create validity mask
+            # Create validity mask (single mask for all fields - they share the same grid!)
             levselected = lev[None,None,None,None,:,None]
             pspatchexp = pspatch[:,None,:,:,None,:]
             belowsurface = levselected > pspatchexp
-            belowsurface = belowsurface.expand(-1,nfieldvars,-1,-1,-1,-1)
-            validmask = ~belowsurface
+            # Keep as single mask: (nbatch, 1, plats, plons, plevs, ptimes)
+            validmask = (~belowsurface).unsqueeze(1)
         if timelag>0 and tmask is not None and tmask.any():
+            # Expand tmask to match fieldpatch dimensions for data channels
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
-        fieldpatch = fieldpatch.masked_fill(~validmask,0.0)
-        fieldpatch = torch.cat([fieldpatch,validmask.float()],dim=1)
+            # Also mask the validity mask (set invalid times to 0)
+            tmask_validity = tmask[:,None,None,None,None,:].expand(-1,1,plats,plons,plevs,-1)
+            validmask = validmask.masked_fill(tmask_validity, 0.0)
+        # Mask invalid data to 0 using broadcasting (single validmask broadcasts to all field channels)
+        fieldpatch = fieldpatch.masked_fill(~validmask.expand(-1,nfieldvars,-1,-1,-1,-1), 0.0)
+        # Concatenate single validity mask as 4th channel
+        fieldpatch = torch.cat([fieldpatch, validmask.float()], dim=1)
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
         dlevpatch = dataset.dlev[None,:].expand(nbatch,-1).contiguous()

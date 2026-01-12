@@ -100,12 +100,12 @@ class PredictionWriter:
             kerneldims = tuple(kerneldims)
             alldims    = ['field','member','lat','lon','lev','time']
 
-            # Handle doubled field dimension (data + mask channels)
+            # Handle field dimension with validity mask
             nfields_in_data = data.shape[0]
             nfields_original = len(fieldvars)
-            if nfields_in_data == nfields_original * 2:
-                # We have doubled fields: data + mask
-                extended_fieldvars = list(fieldvars) + [f'{var}_mask' for var in fieldvars]
+            if nfields_in_data == nfields_original + 1:
+                # We have data fields + single validity mask
+                extended_fieldvars = list(fieldvars) + ['validity_mask']
             else:
                 extended_fieldvars = fieldvars
 
