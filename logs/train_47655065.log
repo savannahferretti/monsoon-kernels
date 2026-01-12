@@ -1,0 +1,50 @@
+Training model: kernel_gaussian_vertical
+20:39:01 - INFO - Spinning up...
+20:39:02 - INFO - Preparing data splits...
+20:40:53 - INFO - Common domain constraints: maxradius=1, maxtimelag=6
+20:40:53 - INFO - Training `kernel_gaussian_vertical`...
+20:41:13 - INFO -    Training samples: 21557214, Validation samples: 4308318
+20:41:13 - INFO -    Training batches: 43115, Validation batches: 8617
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260111_204113-4f6015h9
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run kernel_gaussian_vertical
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/4f6015h9
+20:45:07 - INFO -    Epoch 1/20: train_loss=0.715363, valid_loss=0.596323, lr=5.00e-04
+20:45:07 - INFO -    Timing: epoch=3.5min, data=0.2min (6%), compute=3.3min (94%)
+20:48:52 - INFO -    Epoch 2/20: train_loss=0.701596, valid_loss=0.584738, lr=5.00e-04
+20:48:52 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+20:52:37 - INFO -    Epoch 3/20: train_loss=0.691455, valid_loss=0.576124, lr=5.00e-04
+20:52:37 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+20:56:22 - INFO -    Epoch 4/20: train_loss=0.688805, valid_loss=0.577130, lr=5.00e-04
+20:56:22 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+21:00:04 - INFO -    Epoch 5/20: train_loss=0.687686, valid_loss=0.576510, lr=5.00e-04
+21:00:04 - INFO -    Timing: epoch=3.3min, data=0.2min (6%), compute=3.1min (94%)
+21:03:48 - INFO -    Epoch 6/20: train_loss=0.687181, valid_loss=0.580100, lr=2.50e-04
+21:03:48 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+21:07:32 - INFO -    Epoch 7/20: train_loss=0.684943, valid_loss=0.576517, lr=2.50e-04
+21:07:32 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+21:07:32 - INFO -    Training complete: duration=26.3min, best_epoch=3, best_loss=0.576124
+21:07:33 - INFO -       Attempting to save kernel_gaussian_vertical.pth...
+21:07:33 - INFO -          File write successful
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           Epoch ▁▂▃▅▆▇█
+wandb:   Learning rate █████▁▁
+wandb:   Training loss █▅▂▂▂▂▁
+wandb: Validation loss █▄▁▁▁▂▁
+wandb: 
+wandb: Run summary:
+wandb: Best validation loss 0.57612
+wandb:                Epoch 7
+wandb:        Learning rate 0.00025
+wandb:        Training loss 0.68494
+wandb:      Validation loss 0.57652
+wandb: 
+wandb: 🚀 View run kernel_gaussian_vertical at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/4f6015h9
+wandb: ⭐️ View project at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260111_204113-4f6015h9/logs

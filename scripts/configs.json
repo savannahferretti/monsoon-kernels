@@ -92,6 +92,13 @@
          "patch":{"radius":0,"levmode":"column","timelag":0},
          "uselocal":true,
          "nkernels":1,
-         "kerneldict":{"lev":"tophat"}}
+         "kerneldict":{"lev":"tophat"}},
+    {"name":"kernel_cosine_vertical",
+         "kind":"parametric",
+         "description":"($\\mathbf{x}_0$, $\\mathit{p}^\\mathrm{COS}$, $\\mathit{t}_0$)",
+         "patch":{"radius":0,"levmode":"column","timelag":0},
+         "uselocal":true,
+         "nkernels":1,
+         "kerneldict":{"lev":"cosine"}}
   ]
 }

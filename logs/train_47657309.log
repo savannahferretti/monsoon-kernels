@@ -1,0 +1,56 @@
+Training model: baseline_nonlocal
+21:11:55 - INFO - Spinning up...
+21:11:55 - INFO - Preparing data splits...
+21:13:43 - INFO - Common domain constraints: maxradius=1, maxtimelag=6
+21:13:43 - INFO - Training `baseline_nonlocal`...
+21:14:14 - INFO -    Training samples: 21557214, Validation samples: 4308318
+21:14:14 - INFO -    Training batches: 43115, Validation batches: 8617
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260111_211414-tstgaktk
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run baseline_nonlocal
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/tstgaktk
+21:20:14 - INFO -    Epoch 1/20: train_loss=0.631082, valid_loss=0.517438, lr=5.00e-04
+21:20:14 - INFO -    Timing: epoch=5.1min, data=2.7min (54%), compute=2.3min (46%)
+21:26:08 - INFO -    Epoch 2/20: train_loss=0.608819, valid_loss=0.516277, lr=5.00e-04
+21:26:08 - INFO -    Timing: epoch=5.0min, data=2.6min (53%), compute=2.4min (47%)
+21:32:02 - INFO -    Epoch 3/20: train_loss=0.601141, valid_loss=0.493825, lr=5.00e-04
+21:32:02 - INFO -    Timing: epoch=5.0min, data=2.7min (54%), compute=2.3min (46%)
+21:37:58 - INFO -    Epoch 4/20: train_loss=0.595912, valid_loss=0.505306, lr=5.00e-04
+21:37:58 - INFO -    Timing: epoch=5.0min, data=2.6min (52%), compute=2.4min (48%)
+21:43:56 - INFO -    Epoch 5/20: train_loss=0.592256, valid_loss=0.496500, lr=5.00e-04
+21:43:56 - INFO -    Timing: epoch=5.0min, data=2.7min (53%), compute=2.4min (47%)
+21:49:54 - INFO -    Epoch 6/20: train_loss=0.589127, valid_loss=0.486773, lr=5.00e-04
+21:49:54 - INFO -    Timing: epoch=5.1min, data=2.7min (53%), compute=2.4min (47%)
+21:55:48 - INFO -    Epoch 7/20: train_loss=0.586679, valid_loss=0.492194, lr=5.00e-04
+21:55:48 - INFO -    Timing: epoch=5.0min, data=2.7min (53%), compute=2.3min (47%)
+22:01:44 - INFO -    Epoch 8/20: train_loss=0.584686, valid_loss=0.501361, lr=5.00e-04
+22:01:44 - INFO -    Timing: epoch=5.0min, data=2.7min (54%), compute=2.3min (46%)
+22:07:40 - INFO -    Epoch 9/20: train_loss=0.582590, valid_loss=0.493939, lr=2.50e-04
+22:07:40 - INFO -    Timing: epoch=5.0min, data=2.7min (53%), compute=2.4min (47%)
+22:13:36 - INFO -    Epoch 10/20: train_loss=0.573458, valid_loss=0.488908, lr=2.50e-04
+22:13:36 - INFO -    Timing: epoch=5.0min, data=2.7min (53%), compute=2.4min (47%)
+22:13:36 - INFO -    Training complete: duration=59.3min, best_epoch=6, best_loss=0.486773
+22:13:36 - INFO -       Attempting to save baseline_nonlocal.pth...
+22:13:37 - INFO -          File write successful
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           Epoch ▁▂▃▃▄▅▆▆▇█
+wandb:   Learning rate ████████▁▁
+wandb:   Training loss █▅▄▄▃▃▃▂▂▁
+wandb: Validation loss ██▃▅▃▁▂▄▃▁
+wandb: 
+wandb: Run summary:
+wandb: Best validation loss 0.48677
+wandb:                Epoch 10
+wandb:        Learning rate 0.00025
+wandb:        Training loss 0.57346
+wandb:      Validation loss 0.48891
+wandb: 
+wandb: 🚀 View run baseline_nonlocal at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/tstgaktk
+wandb: ⭐️ View project at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260111_211414-tstgaktk/logs

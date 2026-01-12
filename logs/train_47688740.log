@@ -1,0 +1,50 @@
+Training model: kernel_cosine_vertical
+08:52:07 - INFO - Spinning up...
+08:52:08 - INFO - Preparing data splits...
+08:54:17 - INFO - Common domain constraints: maxradius=1, maxtimelag=6
+08:54:17 - INFO - Training `kernel_cosine_vertical`...
+08:54:39 - INFO -    Training samples: 21557214, Validation samples: 4308318
+08:54:39 - INFO -    Training batches: 43115, Validation batches: 8617
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260112_085439-anbmhkie
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run kernel_cosine_vertical
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/anbmhkie
+08:58:36 - INFO -    Epoch 1/20: train_loss=0.708461, valid_loss=0.589168, lr=5.00e-04
+08:58:36 - INFO -    Timing: epoch=3.5min, data=0.2min (6%), compute=3.3min (94%)
+09:02:26 - INFO -    Epoch 2/20: train_loss=0.695913, valid_loss=0.580009, lr=5.00e-04
+09:02:26 - INFO -    Timing: epoch=3.5min, data=0.2min (6%), compute=3.2min (94%)
+09:06:17 - INFO -    Epoch 3/20: train_loss=0.693484, valid_loss=0.576558, lr=5.00e-04
+09:06:17 - INFO -    Timing: epoch=3.5min, data=0.2min (6%), compute=3.3min (94%)
+09:10:06 - INFO -    Epoch 4/20: train_loss=0.692111, valid_loss=0.578135, lr=5.00e-04
+09:10:06 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+09:13:55 - INFO -    Epoch 5/20: train_loss=0.691256, valid_loss=0.577411, lr=5.00e-04
+09:13:55 - INFO -    Timing: epoch=3.5min, data=0.2min (6%), compute=3.2min (94%)
+09:17:44 - INFO -    Epoch 6/20: train_loss=0.690729, valid_loss=0.583121, lr=2.50e-04
+09:17:44 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+09:21:33 - INFO -    Epoch 7/20: train_loss=0.688304, valid_loss=0.577766, lr=2.50e-04
+09:21:33 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+09:21:33 - INFO -    Training complete: duration=26.8min, best_epoch=3, best_loss=0.576558
+09:21:33 - INFO -       Attempting to save kernel_cosine_vertical.pth...
+09:21:33 - INFO -          File write successful
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           Epoch ▁▂▃▅▆▇█
+wandb:   Learning rate █████▁▁
+wandb:   Training loss █▄▃▂▂▂▁
+wandb: Validation loss █▃▁▂▁▅▂
+wandb: 
+wandb: Run summary:
+wandb: Best validation loss 0.57656
+wandb:                Epoch 7
+wandb:        Learning rate 0.00025
+wandb:        Training loss 0.6883
+wandb:      Validation loss 0.57777
+wandb: 
+wandb: 🚀 View run kernel_cosine_vertical at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/anbmhkie
+wandb: ⭐️ View project at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260112_085439-anbmhkie/logs

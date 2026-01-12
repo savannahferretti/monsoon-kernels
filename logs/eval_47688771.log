@@ -1,0 +1,19 @@
+Evaluating model: kernel_cosine_vertical
+09:10:08 - INFO - Spinning up...
+09:10:08 - INFO - Preparing evaluation split...
+09:10:26 - INFO - Common domain constraints: maxradius=1, maxtimelag=6
+09:10:26 - INFO - Evaluating `kernel_cosine_vertical`...
+Traceback (most recent call last):
+  File "/global/homes/s/sferrett/.conda/envs/monsoon-kernels/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/global/homes/s/sferrett/.conda/envs/monsoon-kernels/lib/python3.9/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/scripts/models/evaluate.py", line 191, in <module>
+    model = load(name,modelconfig,result,device)
+  File "/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/scripts/models/evaluate.py", line 102, in load
+    model.load_state_dict(state)
+  File "/global/homes/s/sferrett/.conda/envs/monsoon-kernels/lib/python3.9/site-packages/torch/nn/modules/module.py", line 2593, in load_state_dict
+    raise RuntimeError(
+RuntimeError: Error(s) in loading state_dict for KernelNN:
+	Missing key(s) in state_dict: "intkernel.functions.lev.logfreq", "intkernel.functions.lev.phase". 
+	Unexpected key(s) in state_dict: "intkernel.functions.lev.center", "intkernel.functions.lev.logwidth". 
