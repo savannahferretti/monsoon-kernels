@@ -141,10 +141,13 @@ def inference(model,split,result,uselocal,device):
                     if model.intkernel.weights is None:
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
                     weights = model.intkernel.weights.detach().cpu().numpy()
-                    # Extract component weights for mixture kernels if available
+                    # Compute component weights for mixture kernels (only for parametric kernels)
                     component_weights = None
-                    if hasattr(model.intkernel, 'component_weights') and model.intkernel.component_weights is not None:
-                        component_weights = model.intkernel.component_weights.detach().cpu().numpy()
+                    if hasattr(model.intkernel, 'get_weights'):
+                        # Parametric kernel: explicitly compute components
+                        _ = model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,device,compute_components=True)
+                        if model.intkernel.component_weights is not None:
+                            component_weights = model.intkernel.component_weights.detach().cpu().numpy()
                 if model.intkernel.features is not None:
                     featslist.append(model.intkernel.features.detach().cpu().numpy())
             else:

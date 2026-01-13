@@ -508,7 +508,7 @@ class ParametricKernelLayer(torch.nn.Module):
         else:
             raise ValueError(f'Unknown function type `{function}`; must be `gaussian`, `tophat`, `exponential`, `cosine`, `mixture`, or `bidirectional`')
 
-    def get_weights(self,dareapatch,dlevfull,dtimepatch,device):
+    def get_weights(self,dareapatch,dlevfull,dtimepatch,device,compute_components=False):
         '''
         Purpose: Obtain normalized parametric kernel weights using fixed grid quadrature.
         Args:
@@ -516,6 +516,7 @@ class ParametricKernelLayer(torch.nn.Module):
         - dlevfull (torch.Tensor): full vertical thickness weights from fixed grid with shape (nlevs,)
         - dtimepatch (torch.Tensor): time step weights patch with shape (ptimes,) or (nbatch, ptimes)
         - device (str | torch.device): device to use
+        - compute_components (bool): whether to compute component weights for mixture kernels (default: False)
         Returns:
         - torch.Tensor: normalized kernel weights of shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
         '''
@@ -556,7 +557,11 @@ class ParametricKernelLayer(torch.nn.Module):
         self.weights = KernelModule.normalize(kernel,dareapatch0,self.dlevfull,dtimepatch0,self.kerneldims)
 
         # Compute component weights for mixture kernels (for separate visualization)
+        # Only compute when explicitly requested (e.g., during evaluation, not training)
         self.component_weights = None
+        if not compute_components:
+            return self.weights
+
         has_mixture = False
         for dim in self.kerneldims:
             if self.perfield[dim]:
