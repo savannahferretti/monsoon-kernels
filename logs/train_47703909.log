@@ -1,0 +1,50 @@
+Training model: kernel_bidirectional_vertical
+12:47:09 - INFO - Spinning up...
+12:47:10 - INFO - Preparing data splits...
+12:49:38 - INFO - Common domain constraints: maxradius=1, maxtimelag=6
+12:49:38 - INFO - Training `kernel_bidirectional_vertical`...
+12:50:01 - INFO -    Training samples: 21557214, Validation samples: 4308318
+12:50:01 - INFO -    Training batches: 43115, Validation batches: 8617
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260112_125002-vnhj901x
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run kernel_bidirectional_vertical
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/vnhj901x
+12:53:59 - INFO -    Epoch 1/20: train_loss=0.710017, valid_loss=0.589740, lr=5.00e-04
+12:53:59 - INFO -    Timing: epoch=3.5min, data=0.2min (6%), compute=3.3min (94%)
+12:57:46 - INFO -    Epoch 2/20: train_loss=0.695102, valid_loss=0.580827, lr=5.00e-04
+12:57:46 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+13:01:32 - INFO -    Epoch 3/20: train_loss=0.692477, valid_loss=0.578380, lr=5.00e-04
+13:01:32 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+13:05:19 - INFO -    Epoch 4/20: train_loss=0.690962, valid_loss=0.580116, lr=5.00e-04
+13:05:19 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+13:09:06 - INFO -    Epoch 5/20: train_loss=0.689965, valid_loss=0.579426, lr=5.00e-04
+13:09:06 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+13:12:53 - INFO -    Epoch 6/20: train_loss=0.689314, valid_loss=0.583625, lr=2.50e-04
+13:12:53 - INFO -    Timing: epoch=3.4min, data=0.2min (6%), compute=3.2min (94%)
+13:16:42 - INFO -    Epoch 7/20: train_loss=0.687024, valid_loss=0.578613, lr=2.50e-04
+13:16:42 - INFO -    Timing: epoch=3.5min, data=0.2min (6%), compute=3.2min (94%)
+13:16:42 - INFO -    Training complete: duration=26.6min, best_epoch=3, best_loss=0.578380
+13:16:42 - INFO -       Attempting to save kernel_bidirectional_vertical.pth...
+13:16:42 - INFO -          File write successful
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           Epoch ▁▂▃▅▆▇█
+wandb:   Learning rate █████▁▁
+wandb:   Training loss █▃▃▂▂▂▁
+wandb: Validation loss █▃▁▂▂▄▁
+wandb: 
+wandb: Run summary:
+wandb: Best validation loss 0.57838
+wandb:                Epoch 7
+wandb:        Learning rate 0.00025
+wandb:        Training loss 0.68702
+wandb:      Validation loss 0.57861
+wandb: 
+wandb: 🚀 View run kernel_bidirectional_vertical at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/vnhj901x
+wandb: ⭐️ View project at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260112_125002-vnhj901x/logs

@@ -43,8 +43,6 @@ if __name__=='__main__':
     darea,dlev,dtime = calculator.calc_quadrature_weights(t)
     logger.info('Creating datasets...')
     dslist = [
-        calculator.create_dataset(t,'t','Air temperature','K'),
-        calculator.create_dataset(q,'q','Specific humidity','kg/kg'),
         calculator.create_dataset(rh,'rh','Relative humidity','%'),
         calculator.create_dataset(thetae,'thetae','Equivalent potential temperature','K'),
         calculator.create_dataset(thetaestar,'thetaestar','Saturated equivalent potential temperature','K'),
@@ -55,7 +53,7 @@ if __name__=='__main__':
         calculator.create_dataset(pr,'pr','Precipitation rate','mm/hr'),
         calculator.create_dataset(darea,'darea','Horizontal area weights','m²'),
         calculator.create_dataset(dlev,'dlev','Vertical thickness weights','hPa'),
-        calculator.create_dataset(dtime,'dtime','Time step weights (constant cadence)','s')]
+        calculator.create_dataset(dtime,'dtime','Time step weights (constant cadence)','hr')]
     logger.info('Saving datasets...')
     for ds in dslist:
         calculator.save(ds)

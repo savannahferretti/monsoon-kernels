@@ -56,7 +56,7 @@ class BaselineNN(torch.nn.Module):
         '''
         Purpose: Forward pass through BaselineNN.
         Args:
-        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, 2*nfieldvars, plats, plons, plevs, ptimes) where first half are data channels and second half are validity masks
         - localvalues (torch.Tensor | None): local input values with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
@@ -104,19 +104,20 @@ class KernelNN(torch.nn.Module):
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
 
-    def forward(self,fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues=None):
+    def forward(self,fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues=None):
         '''
         Purpose: Forward pass through KernelNN.
         Args:
-        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
+        - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, 2*nfieldvars, plats, plons, plevs, ptimes) where first half are data channels and second half are validity masks
         - dareapatch (torch.Tensor): horizontal area weights patch with shape (nbatch, plats, plons)
         - dlevpatch (torch.Tensor): vertical thickness weights patch with shape (nbatch, plevs)
         - dtimepatch (torch.Tensor): time step weights patch with shape (nbatch, ptimes)
+        - dlevfull (torch.Tensor): full vertical thickness weights from fixed grid with shape (nlevs,)
         - localvalues (torch.Tensor | None): local input values with shape (nbatch, nlocalvars) if uselocal is True, otherwise None
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
-        features = self.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
+        features = self.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull)
         if self.uselocal:
             if localvalues is None:
                 raise ValueError('`localvalues` must be provided when `uselocal` is True')

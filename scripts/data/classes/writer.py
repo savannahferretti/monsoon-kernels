@@ -99,6 +99,12 @@ class PredictionWriter:
                 raise ValueError('`kerneldims` required for weight formatting')
             kerneldims = tuple(kerneldims)
             alldims    = ['field','member','lat','lon','lev','time']
+
+            # Only save weights for predictor fields (exclude validity_mask channel)
+            # data has shape (nfieldvars, ...) where nfieldvars = len(fieldvars) + 1
+            # We only want to save the first len(fieldvars) channels
+            nfields_original = len(fieldvars)
+
             if nonparam:
                 keep    = ('field','member')
                 dims0   = ['field','member']
@@ -109,7 +115,12 @@ class PredictionWriter:
                 coords0 = {'field':fieldvars}
             dims1   = [dim for dim in ('lat','lon','lev','time') if dim in kerneldims]
             indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
-            arr     = data[tuple(indexer)]
+
+            # Extract only the first nfields_original channels (exclude validity_mask)
+            arr = data[tuple(indexer)]
+            if arr.shape[0] > nfields_original:
+                arr = arr[:nfields_original]
+
             return arr,{'kind':'weights','dims0':dims0,'dims1':dims1,'coords0':coords0,'nonparam':nonparam}
 
         raise ValueError(f'Unknown kind `{kind}`')

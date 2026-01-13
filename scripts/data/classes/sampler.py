@@ -7,13 +7,13 @@ import xarray as xr
 
 class PatchDataset(torch.utils.data.Dataset):
 
-    def __init__(self,radius,maxlevs,timelag,field,darea,dlev,dtime,ps,lev,local,target,uselocal,lats,lons,latrange,lonrange):
+    def __init__(self,radius,levmode,timelag,field,darea,dlev,dtime,ps,lev,local,target,uselocal,lats,lons,latrange,lonrange,maxradius,maxtimelag):
         '''
         Purpose: Initialize dataset for extracting spatial-temporal patches from climate data.
         Args:
-        - radius (int): number of horizontal grid points on each side of center
-        - maxlevs (int): maximum number of vertical levels
-        - timelag (int): number of past time steps; if 0, use only current time
+        - radius (int): number of horizontal grid points on each side of center for this model
+        - levmode (str): vertical level extraction mode (surface or column)
+        - timelag (int): number of past time steps for this model; if 0, use only current time
         - field (torch.Tensor): predictor fields with shape (nfieldvars, nlats, nlons, nlevs, ntimes)
         - darea (torch.Tensor): horizontal area weights with shape (nlats, nlons)
         - dlev (torch.Tensor): vertical thickness weights with shape (nlevs,)
@@ -27,6 +27,8 @@ class PatchDataset(torch.utils.data.Dataset):
         - lons (np.ndarray): longitude values with shape (nlons,)
         - latrange (tuple[float,float]): latitude range for valid patches
         - lonrange (tuple[float,float]): longitude range for valid patches
+        - maxradius (int): maximum radius across all models for common domain
+        - maxtimelag (int): maximum timelag across all models for common domain
         '''
         super().__init__()
         if field.ndim!=5:
@@ -46,8 +48,10 @@ class PatchDataset(torch.utils.data.Dataset):
         if target.ndim!=3:
             raise ValueError('`target` must have shape (nlats, nlons, ntimes)')
         self.radius = int(radius)
-        self.maxlevs = int(maxlevs)
+        self.levmode = str(levmode)
         self.timelag = int(timelag)
+        self.maxradius = int(maxradius)
+        self.maxtimelag = int(maxtimelag)
         self.field = field
         self.darea = darea
         self.dlev = dlev
@@ -61,7 +65,7 @@ class PatchDataset(torch.utils.data.Dataset):
         latidxs,lonidxs,timeidxs = torch.nonzero(torch.isfinite(target),as_tuple=True)
         lats = torch.as_tensor(lats,dtype=torch.float32)
         lons = torch.as_tensor(lons,dtype=torch.float32)
-        patchfits = ((latidxs>=self.radius)&(latidxs<nlats-self.radius)&(lonidxs>=self.radius)&(lonidxs<nlons-self.radius))
+        patchfits = ((latidxs>=self.maxradius)&(latidxs<nlats-self.maxradius)&(lonidxs>=self.maxradius)&(lonidxs<nlons-self.maxradius)&(timeidxs>=self.maxtimelag))
         indomain = ((lats[latidxs]>=latrange[0])&(lats[latidxs]<=latrange[1])&(lons[lonidxs]>=lonrange[0])&(lons[lonidxs]<=lonrange[1]))
         valid = patchfits&indomain
         self.centers = list(zip(latidxs[valid].tolist(),lonidxs[valid].tolist(),timeidxs[valid].tolist()))
@@ -92,7 +96,7 @@ class PatchDataset(torch.utils.data.Dataset):
         '''
         plats = 2*self.radius + 1
         plons = 2*self.radius + 1
-        plevs = self.maxlevs
+        plevs = 1 if self.levmode=='surface' else self.lev.shape[0]
         ptimes = self.timelag + 1 if self.timelag > 0 else 1
         return (plats,plons,plevs,ptimes)
 
@@ -110,38 +114,14 @@ class PatchDataset(torch.utils.data.Dataset):
         lonidx = torch.tensor([b[1] for b in batch],dtype=torch.long)
         timeidx = torch.tensor([b[2] for b in batch],dtype=torch.long)
         radius = dataset.radius
-        maxlevs = dataset.maxlevs
+        levmode = dataset.levmode
         timelag = dataset.timelag
         latoff = torch.arange(-radius,radius+1,dtype=torch.long)
         lonoff = torch.arange(-radius,radius+1,dtype=torch.long)
         latgrid = latidx[:,None]+latoff[None,:]
         longrid = lonidx[:,None]+lonoff[None,:]
-
-        # Dynamically select lowest valid levels based on center point surface pressure
         ps = dataset.ps
         lev = dataset.lev
-        pscenter = ps[latidx,lonidx,timeidx]  # (nbatch,)
-        nlevstotal = lev.shape[0]
-
-        # For each sample, find lowest maxlevs valid levels
-        levidx_list = []
-        for i in range(latidx.shape[0]):
-            validmask = lev <= pscenter[i]
-            validindices = torch.where(validmask)[0]
-            if len(validindices) >= maxlevs:
-                levidx_list.append(validindices[:maxlevs])
-            else:
-                # Not enough valid levels, use all valid ones
-                levidx_list.append(validindices)
-
-        # Pad to ensure all have same length
-        levidx = torch.zeros(len(levidx_list),maxlevs,dtype=torch.long)
-        for i,indices in enumerate(levidx_list):
-            levidx[i,:len(indices)] = indices
-            if len(indices) < maxlevs:
-                # Pad with last valid index
-                levidx[i,len(indices):] = indices[-1] if len(indices) > 0 else 0
-
         if timelag>0:
             timeoff = torch.arange(-timelag,1,dtype=torch.long)
             timegrid = timeidx[:,None]+timeoff[None,:]
@@ -154,48 +134,96 @@ class PatchDataset(torch.utils.data.Dataset):
         nfieldvars = field.shape[0]
         plats = latgrid.shape[1]
         plons = longrid.shape[1]
-        plevs = maxlevs
+        nlevs = lev.shape[0]
+        plevs = 1 if levmode=='surface' else nlevs
         ptimes = timegridclamped.shape[1]
         latix = latgrid[:,:,None].expand(-1,-1,plons)
         lonix = longrid[:,None,:].expand(-1,plats,-1)
-
-        # Extract field data using per-sample level indices
         nbatch = latidx.shape[0]
+        latixexp = latix[:,:,:,None].expand(-1,-1,-1,ptimes)
+        lonixexp = lonix[:,:,:,None].expand(-1,-1,-1,ptimes)
+        timeixexp = timegridclamped[:,None,None,:].expand(-1,plats,plons,-1)
+        pspatch = ps[latixexp,lonixexp,timeixexp]
         fieldpatch = torch.zeros(nbatch,nfieldvars,plats,plons,plevs,ptimes,dtype=field.dtype,device=field.device)
-        for i in range(nbatch):
-            for k in range(plevs):
-                for t in range(ptimes):
-                    fieldpatch[i,:,:,:,k,t] = field[:,latix[i],lonix[i],levidx[i,k],timegridclamped[i,t]]
+        if levmode=='surface':
+            # FULLY VECTORIZED SURFACE MODE: 0 loops!
+            # Find first valid level for all (batch, lat, lon, time) at once
+            lev_expanded = lev[None, None, None, :, None]  # (1, 1, 1, nlevs, 1)
+            ps_expanded = pspatch[:, :, :, None, :]  # (nbatch, plats, plons, 1, ptimes)
+            validlevmask = lev_expanded <= ps_expanded  # (nbatch, plats, plons, nlevs, ptimes)
+
+            # Find first valid level index for each (batch, lat, lon, time)
+            levidx_val = validlevmask.to(torch.long).argmax(dim=3)  # (nbatch, plats, plons, ptimes)
+
+            # Prepare indices for advanced indexing - broadcast all to same shape
+            latix_exp = latix[:, :, :, None].expand(nbatch, plats, plons, ptimes)
+            lonix_exp = lonix[:, :, :, None].expand(nbatch, plats, plons, ptimes)
+            timeix_exp = timegridclamped[:, None, None, :].expand(nbatch, plats, plons, ptimes)
+
+            # Flatten all indices for single advanced indexing operation
+            flat_size = nbatch * plats * plons * ptimes
+            latix_flat = latix_exp.reshape(flat_size)
+            lonix_flat = lonix_exp.reshape(flat_size)
+            levidx_flat = levidx_val.reshape(flat_size)
+            timeix_flat = timeix_exp.reshape(flat_size)
+
+            # Single vectorized extraction for all samples!
+            # field shape: (nfieldvars, nlats, nlons, nlevs, ntimes)
+            fieldpatch_flat = field[:, latix_flat, lonix_flat, levidx_flat, timeix_flat]  # (nfieldvars, flat_size)
+
+            # Reshape back to batch structure
+            fieldpatch_temp = fieldpatch_flat.reshape(nfieldvars, nbatch, plats, plons, ptimes)
+            # Permute to (nbatch, nfieldvars, plats, plons, ptimes) and add plevs=1 dimension
+            fieldpatch = fieldpatch_temp.permute(1, 0, 2, 3, 4).unsqueeze(4)  # (nbatch, nfieldvars, plats, plons, 1, ptimes)
+
+            # Surface mode: all data is valid (single mask channel)
+            validmask = torch.ones(nbatch, 1, plats, plons, plevs, ptimes, dtype=torch.bool, device=field.device)
+        else:
+            # FULLY VECTORIZED EXTRACTION: 0 loops! (like old loader.py)
+            # Build 6D index tensors to extract all (batch, lat, lon, lev, time) in ONE operation
+            latix6 = latix[:, None, :, :, None, None]  # (B, 1, plats, plons, 1, 1)
+            lonix6 = lonix[:, None, :, :, None, None]  # (B, 1, plats, plons, 1, 1)
+            levix6 = torch.arange(plevs, dtype=torch.long, device=field.device)[None, None, None, None, :, None]  # (1, 1, 1, 1, plevs, 1)
+            timeix6 = timegridclamped[:, None, None, None, None, :]  # (B, 1, 1, 1, 1, ptimes)
+
+            # Single advanced indexing operation replaces ALL loops!
+            fieldpatch = field[:, latix6.squeeze(1), lonix6.squeeze(1), levix6.squeeze(0).squeeze(0), timeix6.squeeze(1)]
+            # Result: (nfieldvars, B, plats, plons, plevs, ptimes)
+            fieldpatch = fieldpatch.permute(1, 0, 2, 3, 4, 5).contiguous()  # (B, nfieldvars, plats, plons, plevs, ptimes)
+
+            # Create validity mask (single mask for all fields - they share the same grid!)
+            levselected = lev[None,None,None,None,:,None]  # (1, 1, 1, 1, plevs, 1)
+            pspatchexp = pspatch[:,None,:,:,None,:]  # (nbatch, 1, plats, plons, 1, ptimes)
+            belowsurface = levselected > pspatchexp  # Broadcasts to (nbatch, 1, plats, plons, plevs, ptimes)
+            # Keep as single mask: (nbatch, 1, plats, plons, plevs, ptimes)
+            validmask = ~belowsurface  # Already has correct shape, don't unsqueeze!
         if timelag>0 and tmask is not None and tmask.any():
+            # Expand tmask to match fieldpatch dimensions for data channels
             tmask6 = tmask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1)
             fieldpatch = fieldpatch.masked_fill(tmask6,0)
-
-        # Apply per-point surface masking (some points in patch may have different ps)
-        pspatch = ps[latix,lonix,timegridclamped[:,None,None,:]]
-        for i in range(nbatch):
-            levgrid_i = lev[levidx[i]][None,None,:,None]  # (1, 1, plevs, 1)
-            pspatch_i = pspatch[i:i+1,:,:,None,:]  # (1, plats, plons, 1, ptimes) - add level dim
-            belowsurface_i = levgrid_i > pspatch_i  # (1, plats, plons, plevs, ptimes)
-            belowsurface_i = belowsurface_i[:,None,:,:,:,:].expand(-1,nfieldvars,-1,-1,-1,-1)
-            fieldpatch[i:i+1] = fieldpatch[i:i+1].masked_fill(belowsurface_i,float('nan'))
-
+            # Also mask the validity mask (set invalid times to 0)
+            tmask_validity = tmask[:,None,None,None,None,:].expand(-1,1,plats,plons,plevs,-1)
+            validmask = validmask.masked_fill(tmask_validity, 0.0)
+        # Mask invalid data to 0 using broadcasting (single validmask broadcasts to all field channels)
+        fieldpatch = fieldpatch.masked_fill(~validmask.expand(-1,nfieldvars,-1,-1,-1,-1), 0.0)
+        # Concatenate validity mask as 4th channel so model can learn to use it
+        # The mask helps the model learn which levels to weight/ignore for each predictor
+        fieldpatch = torch.cat([fieldpatch, validmask.float()], dim=1)
         darea = dataset.darea
         dareapatch = darea[latix,lonix].contiguous()
-
-        # Extract dlev for dynamically selected levels per sample
-        dlevpatch = torch.zeros(nbatch,plevs,dtype=dataset.dlev.dtype,device=dataset.dlev.device)
-        for i in range(nbatch):
-            dlevpatch[i] = dataset.dlev[levidx[i]]
+        dlevpatch = dataset.dlev[None,:].expand(nbatch,-1).contiguous()
         dtime = dataset.dtime
         dtimepatch = dtime[timegridclamped].contiguous()
         if timelag>0 and tmask is not None and tmask.any():
             dtimepatch = dtimepatch.masked_fill(tmask,0)
         targetvalues = dataset.target[latidx,lonidx,timeidx].contiguous()
+        dlevfull = dataset.dlev
         out = {
             'fieldpatch':fieldpatch,
             'dareapatch':dareapatch,
             'dlevpatch':dlevpatch,
             'dtimepatch':dtimepatch,
+            'dlevfull':dlevfull,
             'targetvalues':targetvalues}
         if dataset.uselocal and dataset.local is not None:
             localvalues = dataset.local[:,latidx,lonidx,timeidx].permute(1,0).contiguous()
@@ -248,18 +276,20 @@ class PatchDataLoader:
         return result
 
     @staticmethod
-    def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device):
+    def dataloaders(splitdata,patchconfig,uselocal,latrange,lonrange,batchsize,workers,device,maxradius,maxtimelag):
         '''
         Purpose: Create PyTorch DataLoaders for all splits.
         Args:
         - splitdata (dict): dictionary from prepare method
-        - patchconfig (dict): patch configuration with radius, maxlevs, timelag
+        - patchconfig (dict): patch configuration with radius, levmode, timelag
         - uselocal (bool): whether to use local inputs
         - latrange (tuple[float,float]): latitude range
         - lonrange (tuple[float,float]): longitude range
         - batchsize (int): batch size for DataLoader
         - workers (int): number of worker processes
         - device (str): device type
+        - maxradius (int): maximum radius across all models for common domain
+        - maxtimelag (int): maximum timelag across all models for common domain
         Returns:
         - dict: dictionary with datasets and loaders
         '''
@@ -272,7 +302,7 @@ class PatchDataLoader:
         for split,data in splitdata.items():
             datasets[split] = PatchDataset(
                 patchconfig['radius'],
-                patchconfig['maxlevs'],
+                patchconfig['levmode'],
                 patchconfig['timelag'],
                 data['field'],
                 data['darea'],
@@ -286,7 +316,9 @@ class PatchDataLoader:
                 data['lats'],
                 data['lons'],
                 latrange,
-                lonrange)
+                lonrange,
+                maxradius,
+                maxtimelag)
             loaders[split] = torch.utils.data.DataLoader(
                 datasets[split],
                 batch_size=batchsize,

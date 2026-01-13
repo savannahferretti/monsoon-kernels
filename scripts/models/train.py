@@ -56,7 +56,7 @@ def initialize(name,modelconfig,result,device,fieldvars,localvars):
     - torch.nn.Module: initialized model instance on device
     '''
     patchshape = result['geometry'].shape()
-    nfieldvars = len(fieldvars)
+    nfieldvars = len(fieldvars) + 1  # Data fields + validity mask channel
     nlocalvars = len(localvars)
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
     return model.to(device)
@@ -68,6 +68,9 @@ if __name__=='__main__':
     models = parse()
     logger.info('Preparing data splits...')
     splitdata    = PatchDataLoader.prepare(['train','valid'],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
+    maxradius = max(m['patch']['radius'] for m in config.models)
+    maxtimelag = max(m['patch']['timelag'] for m in config.models)
+    logger.info(f'Common domain constraints: maxradius={maxradius}, maxtimelag={maxtimelag}')
     cachedconfig = None
     cachedresult = None
     for modelconfig in config.models:
@@ -78,12 +81,12 @@ if __name__=='__main__':
         logger.info(f'Training `{name}`...')
         patchconfig   = modelconfig['patch']
         uselocal      = modelconfig['uselocal']
-        currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
+        currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
         if currentconfig==cachedconfig:
             result = cachedresult
         else:
             result = PatchDataLoader.dataloaders(
-                splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device)
+                splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device,maxradius,maxtimelag)
             cachedconfig = currentconfig
             cachedresult = result
         model = initialize(name,modelconfig,result,device,config.fieldvars,config.localvars)

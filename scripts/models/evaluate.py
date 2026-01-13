@@ -86,7 +86,7 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
         logger.error(f'   Checkpoint not found: {filepath}')
         return None
     patchshape = result['geometry'].shape()
-    nfieldvars = len(fieldvars)
+    nfieldvars = len(fieldvars) + 1  # Data fields + validity mask channel
     nlocalvars = len(localvars)
     model = ModelFactory.build(name,modelconfig,patchshape,nfieldvars,nlocalvars)
     if hasattr(model,"intkernel") and hasattr(model.intkernel,"kernel") and (model.intkernel.kernel is None):
@@ -96,7 +96,8 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
             dareapatch = batch["dareapatch"].to(device,non_blocking=True)
             dlevpatch  = batch["dlevpatch"].to(device,non_blocking=True)
             dtimepatch = batch["dtimepatch"].to(device,non_blocking=True)
-            _ = model.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
+            dlevfull   = batch["dlevfull"].to(device,non_blocking=True)
+            _ = model.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull)
     state = torch.load(filepath,map_location='cpu')
     model.load_state_dict(state)
     return model.to(device)
@@ -134,7 +135,8 @@ def inference(model,split,result,uselocal,device):
                 dareapatch = batch['dareapatch'].to(device)
                 dlevpatch = batch['dlevpatch'].to(device)
                 dtimepatch = batch['dtimepatch'].to(device)
-                outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
+                dlevfull = batch['dlevfull'].to(device)
+                outputvalues = model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                 if weights is None:
                     if model.intkernel.weights is None:
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
@@ -160,13 +162,13 @@ if __name__=='__main__':
     logger.info('Spinning up...')
     device       = setup()
     models,split = parse()
-
     logger.info('Preparing evaluation split...')
     splitdata = PatchDataLoader.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
-
+    maxradius = max(m['patch']['radius'] for m in config.models)
+    maxtimelag = max(m['patch']['timelag'] for m in config.models)
+    logger.info(f'Common domain constraints: maxradius={maxradius}, maxtimelag={maxtimelag}')
     cachedconfig = None
     cachedresult = None
-
     for modelconfig in config.models:
         name = modelconfig['name']
         kind = modelconfig['kind']
@@ -177,12 +179,12 @@ if __name__=='__main__':
 
         patchconfig   = modelconfig['patch']
         uselocal      = modelconfig['uselocal']
-        currentconfig = (patchconfig['radius'],patchconfig['maxlevs'],patchconfig['timelag'],uselocal)
+        currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
 
         if currentconfig==cachedconfig:
             result = cachedresult
         else:
-            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device) 
+            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,maxradius,maxtimelag)
             cachedconfig = currentconfig
             cachedresult = result
 
