@@ -125,7 +125,7 @@ class PredictionWriter:
 
         raise ValueError(f'Unknown kind `{kind}`')
 
-    def to_dataset(self,arr,meta,*,refda=None,refds=None,nkernels=None):
+    def to_dataset(self,arr,meta,*,refda=None,refds=None,nkernels=None,component_weights=None):
         '''
         Purpose: Wrap a dense ndarray into an xr.Dataset with dims/coords/attrs.
         Args:
@@ -133,6 +133,7 @@ class PredictionWriter:
         - meta (dict[str,object]): metadata returned by to_array()
         - refda (xr.DataArray | None): reference DataArray for coords (preds/features)
         - nkernels (int | None): number of kernels (preds/features)
+        - component_weights (np.ndarray | None): component weights for mixture kernels [ncomponents, ...]
         Returns:
         - xr.Dataset: Dataset ready to save
         '''
@@ -188,9 +189,28 @@ class PredictionWriter:
                         coords[dim] = refds[dim].values
                         continue
                 coords[dim] = np.arange(arr.shape[ax])
-            da = xr.DataArray(arr,dims=dims,coords=coords,name='weights')
-            da.attrs = dict(long_name='Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights',units='N/A')
-            return da.to_dataset()
+
+            ds = xr.Dataset()
+            long_name_base = 'Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights'
+
+            # If component weights provided, create k1, k2, etc. variables
+            if component_weights is not None:
+                for i in range(component_weights.shape[0]):
+                    comp_arr = component_weights[i]
+                    # Extract only the first len(fieldvars) channels (same as for arr)
+                    nfields_original = len(self.fieldvars)
+                    if comp_arr.shape[0] > nfields_original:
+                        comp_arr = comp_arr[:nfields_original]
+                    da = xr.DataArray(comp_arr, dims=dims, coords=coords, name=f'k{i+1}')
+                    da.attrs = dict(long_name=f'{long_name_base} (component {i+1})', units='N/A')
+                    ds[f'k{i+1}'] = da
+            else:
+                # Single kernel: use 'k' as variable name
+                da = xr.DataArray(arr, dims=dims, coords=coords, name='k')
+                da.attrs = dict(long_name=long_name_base, units='N/A')
+                ds['k'] = da
+
+            return ds
 
         raise ValueError(f'Unknown kind `{kind}` in meta')
 

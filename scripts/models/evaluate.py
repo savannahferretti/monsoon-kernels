@@ -215,29 +215,9 @@ if __name__=='__main__':
                 info['weights'],'weights',
                 kerneldims=info['kerneldims'],
                 nonparam=info['nonparam'])
-            ds = out.to_dataset(arr,meta,refds=refds)
+            ds = out.to_dataset(arr,meta,refds=refds,component_weights=info['component_weights'])
             out.save(name,ds,'weights',split,WEIGHTSDIR)
             del arr,meta,ds
-            # Save component weights for mixture kernels if available
-            if info['component_weights'] is not None:
-                logger.info('   Formatting/saving mixture kernel component weights...')
-                # Component weights have shape [2, nfieldvars, nkernels, ...]
-                # Save component 1
-                arr,meta = out.to_array(
-                    info['component_weights'][0],'weights',
-                    kerneldims=info['kerneldims'],
-                    nonparam=info['nonparam'])
-                ds = out.to_dataset(arr,meta,refds=refds)
-                out.save(name,ds,'weights_c1',split,WEIGHTSDIR)
-                del arr,meta,ds
-                # Save component 2
-                arr,meta = out.to_array(
-                    info['component_weights'][1],'weights',
-                    kerneldims=info['kerneldims'],
-                    nonparam=info['nonparam'])
-                ds = out.to_dataset(arr,meta,refds=refds)
-                out.save(name,ds,'weights_c2',split,WEIGHTSDIR)
-                del arr,meta,ds
             if info['features'] is not None:
                 logger.info('   Formatting/saving kernel-integrated features...')
                 arr,meta = out.to_array(
