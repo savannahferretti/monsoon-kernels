@@ -141,6 +141,10 @@ def inference(model,split,result,uselocal,device):
                     if model.intkernel.weights is None:
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
                     weights = model.intkernel.weights.detach().cpu().numpy()
+                    # Extract component weights for mixture kernels if available
+                    component_weights = None
+                    if hasattr(model.intkernel, 'component_weights') and model.intkernel.component_weights is not None:
+                        component_weights = model.intkernel.component_weights.detach().cpu().numpy()
                 if model.intkernel.features is not None:
                     featslist.append(model.intkernel.features.detach().cpu().numpy())
             else:
@@ -149,10 +153,12 @@ def inference(model,split,result,uselocal,device):
     preds = np.concatenate(predslist,axis=0).astype(np.float32)
     feats = np.concatenate(featslist,axis=0).astype(np.float32) if featslist else None
     weights = weights.astype(np.float32) if weights is not None else None
+    component_weights = component_weights.astype(np.float32) if component_weights is not None else None
     return {
         'predictions':preds,
         'features':feats,
         'weights':weights,
+        'component_weights':component_weights,
         'havekernel':havekernel,
         'nonparam':nonparam,
         'nkernels':nkernels,
@@ -212,6 +218,26 @@ if __name__=='__main__':
             ds = out.to_dataset(arr,meta,refds=refds)
             out.save(name,ds,'weights',split,WEIGHTSDIR)
             del arr,meta,ds
+            # Save component weights for mixture kernels if available
+            if info['component_weights'] is not None:
+                logger.info('   Formatting/saving mixture kernel component weights...')
+                # Component weights have shape [2, nfieldvars, nkernels, ...]
+                # Save component 1
+                arr,meta = out.to_array(
+                    info['component_weights'][0],'weights',
+                    kerneldims=info['kerneldims'],
+                    nonparam=info['nonparam'])
+                ds = out.to_dataset(arr,meta,refds=refds)
+                out.save(name,ds,'weights_c1',split,WEIGHTSDIR)
+                del arr,meta,ds
+                # Save component 2
+                arr,meta = out.to_array(
+                    info['component_weights'][1],'weights',
+                    kerneldims=info['kerneldims'],
+                    nonparam=info['nonparam'])
+                ds = out.to_dataset(arr,meta,refds=refds)
+                out.save(name,ds,'weights_c2',split,WEIGHTSDIR)
+                del arr,meta,ds
             if info['features'] is not None:
                 logger.info('   Formatting/saving kernel-integrated features...')
                 arr,meta = out.to_array(

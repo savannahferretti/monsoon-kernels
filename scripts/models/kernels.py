@@ -348,6 +348,34 @@ class ParametricKernelLayer(torch.nn.Module):
             self.weight1 = torch.nn.Parameter(torch.ones(int(nfieldvars),int(nkernels)))
             self.weight2 = torch.nn.Parameter(torch.ones(int(nfieldvars),int(nkernels)))
 
+        def get_components(self,length,device):
+            '''
+            Purpose: Compute individual Gaussian components separately (for visualization).
+            Args:
+            - length (int): number of points along the axis
+            - device (str | torch.device): device to use
+            Returns:
+            - tuple: (component1, component2) each with shape (nfieldvars, nkernels, length)
+            Notes:
+            - Returns weighted Gaussian components before they are combined
+            - Useful for visualizing each component separately in plots
+            '''
+            coord = torch.linspace(-1.0, 1.0, steps=length, device=device)
+            width1 = torch.exp(self.logwidth1).clamp(min=0.1, max=2.0)
+            width2 = torch.exp(self.logwidth2).clamp(min=0.1, max=2.0)
+
+            # Compute two Gaussian components
+            dist1 = coord[None,None,:] - self.center1[...,None]
+            dist2 = coord[None,None,:] - self.center2[...,None]
+            gauss1 = torch.exp(-dist1**2 / (2 * width1[...,None]**2))
+            gauss2 = torch.exp(-dist2**2 / (2 * width2[...,None]**2))
+
+            # Return weighted components separately
+            component1 = self.weight1[...,None] * gauss1
+            component2 = self.weight2[...,None] * gauss2
+
+            return component1, component2
+
         def forward(self,length,device):
             '''
             Purpose: Evaluate a mixture-of-Gaussians kernel along a coordinate in [-1,1].
@@ -362,18 +390,10 @@ class ParametricKernelLayer(torch.nn.Module):
             - Allows positive/positive, positive/negative, or any combination
             - Examples: two peaks, center-surround, or single peak with negative surround
             '''
-            coord = torch.linspace(-1.0, 1.0, steps=length, device=device)
-            width1 = torch.exp(self.logwidth1).clamp(min=0.1, max=2.0)
-            width2 = torch.exp(self.logwidth2).clamp(min=0.1, max=2.0)
+            component1, component2 = self.get_components(length, device)
 
-            # Compute two Gaussian components
-            dist1 = coord[None,None,:] - self.center1[...,None]
-            dist2 = coord[None,None,:] - self.center2[...,None]
-            gauss1 = torch.exp(-dist1**2 / (2 * width1[...,None]**2))
-            gauss2 = torch.exp(-dist2**2 / (2 * width2[...,None]**2))
-
-            # Combine with independent weights (both can be positive or negative)
-            kernel1d = self.weight1[...,None] * gauss1 + self.weight2[...,None] * gauss2
+            # Combine components
+            kernel1d = component1 + component2
 
             # Add small epsilon to avoid all-zero kernels
             kernel1d = kernel1d + 1e-8
@@ -442,6 +462,7 @@ class ParametricKernelLayer(torch.nn.Module):
         self.kerneldict = dict(kerneldict)
         self.kerneldims = tuple(kerneldict.keys())
         self.weights    = None
+        self.component_weights = None  # For mixture kernels: store separate component weights
         self.features   = None
         self.dlevfull   = None
         self.functions  = torch.nn.ModuleDict()
@@ -533,6 +554,68 @@ class ParametricKernelLayer(torch.nn.Module):
                 view[ax] = kernel.shape[ax]
                 kernel = kernel*kernel1d.view(*view)
         self.weights = KernelModule.normalize(kernel,dareapatch0,self.dlevfull,dtimepatch0,self.kerneldims)
+
+        # Compute component weights for mixture kernels (for separate visualization)
+        self.component_weights = None
+        has_mixture = False
+        for dim in self.kerneldims:
+            if self.perfield[dim]:
+                # Check if any field uses mixture kernel
+                for field_kernel in self.functions[dim]:
+                    if isinstance(field_kernel, self.MixtureGaussianKernel):
+                        has_mixture = True
+                        break
+            else:
+                if isinstance(self.functions[dim], self.MixtureGaussianKernel):
+                    has_mixture = True
+            if has_mixture:
+                break
+
+        if has_mixture:
+            # Compute separate component kernels for mixture kernels
+            # We'll store components as a list of 2 kernels (component1 and component2)
+            kernel_c1 = torch.ones(self.nfieldvars,self.nkernels,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
+            kernel_c2 = torch.ones(self.nfieldvars,self.nkernels,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
+
+            for ax,dim in enumerate(('lat','lon','lev','time'),start=2):
+                if dim in self.kerneldims:
+                    if self.perfield[dim]:
+                        # Per-field kernels
+                        kernel1d_c1_list = []
+                        kernel1d_c2_list = []
+                        for field_idx, field_kernel in enumerate(self.functions[dim]):
+                            if isinstance(field_kernel, self.MixtureGaussianKernel):
+                                c1, c2 = field_kernel.get_components(kernel_c1.shape[ax], device)
+                                kernel1d_c1_list.append(c1)
+                                kernel1d_c2_list.append(c2)
+                            else:
+                                # For non-mixture kernels, both components are the same
+                                kernel1d = field_kernel(kernel_c1.shape[ax], device)
+                                kernel1d_c1_list.append(kernel1d)
+                                kernel1d_c2_list.append(kernel1d)
+                        kernel1d_c1 = torch.cat(kernel1d_c1_list, dim=0)
+                        kernel1d_c2 = torch.cat(kernel1d_c2_list, dim=0)
+                    else:
+                        # Single kernel for all fields
+                        if isinstance(self.functions[dim], self.MixtureGaussianKernel):
+                            kernel1d_c1, kernel1d_c2 = self.functions[dim].get_components(kernel_c1.shape[ax], device)
+                        else:
+                            # For non-mixture kernels, both components are the same
+                            kernel1d = self.functions[dim](kernel_c1.shape[ax], device)
+                            kernel1d_c1 = kernel1d
+                            kernel1d_c2 = kernel1d
+
+                    view = [kernel_c1.shape[0], kernel_c1.shape[1], 1, 1, 1, 1]
+                    view[ax] = kernel_c1.shape[ax]
+                    kernel_c1 = kernel_c1 * kernel1d_c1.view(*view)
+                    kernel_c2 = kernel_c2 * kernel1d_c2.view(*view)
+
+            # Normalize component kernels
+            weights_c1 = KernelModule.normalize(kernel_c1,dareapatch0,self.dlevfull,dtimepatch0,self.kerneldims)
+            weights_c2 = KernelModule.normalize(kernel_c2,dareapatch0,self.dlevfull,dtimepatch0,self.kerneldims)
+            # Stack as [2, nfieldvars, nkernels, ...]
+            self.component_weights = torch.stack([weights_c1, weights_c2], dim=0)
+
         return self.weights
 
     def forward(self,fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull):
