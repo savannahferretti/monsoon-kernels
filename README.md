@@ -1,21 +1,9 @@
 Data-Driven Integration Kernels for the Interpretable Machine Learning of Nonlocal Processes
 ------------
 
-By Savannah L. Ferretti <sup>1</sup>, Tom Beucler <sup>2</sup>, Michael S. Pritchard<sup>3</sup>, & Jane W. Baldwin<sup>1,4</sup>
-
-<sup>1</sup>Department of Earth System Science, University of California, Irvine, Irvine, CA, USA  
-<sup>2</sup>Faculty of Geosciences and Environment, University of Lausanne, Lausanne, VD, CH  
-<sup>3</sup>NVIDIA Corporation, Sanata Clara, CA, USA  
-<sup>4</sup>Lamont-Doherty Earth Observatory, Columbia University, Palisades, NY, USA  
-
 **Status:** This manuscript is currently in preparation and will be submitted to the [15th International Conference on Climate Informatics](https://wp.unil.ch/ci26/). Accepted submisisons are automatically forwarded for peer-review at *Environmental Data Science*. We welcome any comments, questions, or suggestions. Please email your feedback to Savannah Ferretti (savannah.ferretti@uci.edu).
 
-**Key Points**:
-- Point 1
-- Point 2
-- Point 3
-  
-**Abstract**: Insert abstract text here.
+**Abstract**: Machine learning models can represent climate processes that are nonlocal in space, height, and time, but they often combine information across these dimensions in highly nonlinear ways. While this can improve predictive skill, it makes the learned relationships difficult to interpret and prone to overfitting as the nonlocal context grows. We address this by introducing \emph{data-driven integration kernels}, a framework that adds structure to nonlocal operator learning by explicitly separating nonlocal information aggregation from local nonlinear prediction. In this approach, each spatiotemporal predictor field is first integrated using learnable kernels defined as continuous weighting functions over space, height, and/or time, after which a local nonlinear mapping is applied only to the resulting kernel-integrated features and any optional local inputs. This design limits nonlocal interactions to a small set of shared integration patterns and makes each kernel directly interpretable as a weighting pattern that indicates which horizontal distances, vertical levels, and past timesteps contribute most to a prediction. We demonstrate the framework for South Asian monsoon precipitation using a hierarchy of neural network models with increasing structure, including unconstrained baseline models, nonparametric kernel models, and compact parametric kernel models. Across this hierarchy, kernel-based models retain predictive skill comparable to the baseline while using far fewer trainable parameters, showing that much of the relevant nonlocal information can be captured through a small set of physically indexed integrations.
 
 Project Organization
 ------------
@@ -28,28 +16,29 @@ Project Organization
 │   ├── raw/           <- Original ERA5 and IMERG V06 data
 │   ├── interim/       <- Intermediate data that has been transformed
 │   ├── splits/        <- Training, validation, and test sets
-│   └── results/       <- Model predictions (and skill metrics)
+│   ├── predictions/   <- Model predictions
+│   └── weights/       <- Learned kernel weights
 │
 ├── figs/              <- Generated figures/graphics
 │
 ├── models/
 │   ├── baseline/      <- Saved baseline NN models
-│   ├── nonparametric/ <- Saved non-parametric kernel NN models
+│   ├── nonparametric/ <- Saved nonparametric kernel NN models
 │   └── parametric/    <- Saved parametric kernel NN models
 │
 ├── notebooks/         <- Jupyter notebooks for data analysis and visualizations
 │
 ├── scripts/
 │   ├── data/
-│   │   ├── classes/   <- Data processing classes (DataDownloader, DataCalculator, DataSplitter, PatchDataLoader, PredictionWriter)
+│   │   ├── classes/      <- Data processing classes
 │   │   ├── download.py   <- Execution script for downloading raw data
 │   │   ├── calculate.py  <- Execution script for calculating derived variables
 │   │   └── split.py      <- Execution script for creating train/valid/test splits
 │   │
 │   ├── models/
-│   │   ├── classes/      <- Model classes (Trainer, Inferencer, ModelFactory)
-│   │   ├── architectures.py  <- Neural network architectures (MainNN, BaselineNN, KernelNN)
-│   │   ├── kernels.py        <- Kernel layers (NonparametricKernelLayer, ParametricKernelLayer)
+│   │   ├── classes/          <- Model building, training, and inferencing classes
+│   │   ├── architectures.py  <- Neural network architectures
+│   │   ├── kernels.py        <- Kernel layers
 │   │   ├── train.py          <- Execution script for training models
 │   │   └── evaluate.py       <- Execution script for model evaluation
 │   │
