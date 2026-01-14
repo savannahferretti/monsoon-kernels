@@ -1,0 +1,76 @@
+Training model: baseline_nonlocal_horizontal
+11:44:32 - INFO - Spinning up...
+11:44:33 - INFO - Preparing data splits...
+11:46:54 - INFO - Common domain constraints: maxradius = 1, maxtimelag = 6
+11:46:54 - INFO - Training `baseline_nonlocal_horizontal`...
+11:47:17 - INFO -    Training samples: 18245814, Validation samples: 3646518
+11:47:17 - INFO -    Training batches: 36492, Validation batches: 7294
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260114_114718-e72euw85
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run baseline_nonlocal_horizontal
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/e72euw85
+11:49:31 - INFO -    Epoch 1/20: train_loss=0.711039, valid_loss=0.603254, lr=5.00e-04
+11:49:31 - INFO -    Timing: epoch=1.9min, data=0.1min (8%), compute=1.7min (92%)
+11:51:38 - INFO -    Epoch 2/20: train_loss=0.698035, valid_loss=0.601238, lr=5.00e-04
+11:51:38 - INFO -    Timing: epoch=1.9min, data=0.1min (8%), compute=1.7min (92%)
+11:53:43 - INFO -    Epoch 3/20: train_loss=0.693902, valid_loss=0.594979, lr=5.00e-04
+11:53:43 - INFO -    Timing: epoch=1.8min, data=0.1min (8%), compute=1.7min (92%)
+11:55:50 - INFO -    Epoch 4/20: train_loss=0.691513, valid_loss=0.599228, lr=5.00e-04
+11:55:50 - INFO -    Timing: epoch=1.8min, data=0.1min (8%), compute=1.7min (92%)
+11:57:57 - INFO -    Epoch 5/20: train_loss=0.689629, valid_loss=0.595578, lr=5.00e-04
+11:57:57 - INFO -    Timing: epoch=1.9min, data=0.1min (8%), compute=1.7min (92%)
+12:00:04 - INFO -    Epoch 6/20: train_loss=0.688194, valid_loss=0.594386, lr=5.00e-04
+12:00:04 - INFO -    Timing: epoch=1.8min, data=0.1min (8%), compute=1.7min (92%)
+12:02:09 - INFO -    Epoch 7/20: train_loss=0.686881, valid_loss=0.596529, lr=5.00e-04
+12:02:09 - INFO -    Timing: epoch=1.8min, data=0.1min (8%), compute=1.7min (92%)
+12:04:16 - INFO -    Epoch 8/20: train_loss=0.685911, valid_loss=0.595883, lr=5.00e-04
+12:04:16 - INFO -    Timing: epoch=1.9min, data=0.1min (8%), compute=1.7min (92%)
+12:06:22 - INFO -    Epoch 9/20: train_loss=0.684961, valid_loss=0.599920, lr=2.50e-04
+12:06:22 - INFO -    Timing: epoch=1.8min, data=0.2min (8%), compute=1.7min (92%)
+12:08:29 - INFO -    Epoch 10/20: train_loss=0.680772, valid_loss=0.593262, lr=2.50e-04
+12:08:29 - INFO -    Timing: epoch=1.9min, data=0.2min (8%), compute=1.7min (92%)
+12:10:37 - INFO -    Epoch 11/20: train_loss=0.679989, valid_loss=0.593695, lr=2.50e-04
+12:10:37 - INFO -    Timing: epoch=1.9min, data=0.2min (8%), compute=1.7min (92%)
+12:12:45 - INFO -    Epoch 12/20: train_loss=0.679604, valid_loss=0.592754, lr=2.50e-04
+12:12:45 - INFO -    Timing: epoch=1.9min, data=0.2min (8%), compute=1.7min (92%)
+12:14:50 - INFO -    Epoch 13/20: train_loss=0.679089, valid_loss=0.593084, lr=2.50e-04
+12:14:50 - INFO -    Timing: epoch=1.8min, data=0.1min (8%), compute=1.7min (92%)
+12:16:57 - INFO -    Epoch 14/20: train_loss=0.678782, valid_loss=0.593873, lr=2.50e-04
+12:16:57 - INFO -    Timing: epoch=1.8min, data=0.2min (8%), compute=1.7min (92%)
+12:19:03 - INFO -    Epoch 15/20: train_loss=0.678332, valid_loss=0.595190, lr=1.25e-04
+12:19:03 - INFO -    Timing: epoch=1.8min, data=0.2min (8%), compute=1.7min (92%)
+12:21:11 - INFO -    Epoch 16/20: train_loss=0.675725, valid_loss=0.592277, lr=1.25e-04
+12:21:11 - INFO -    Timing: epoch=1.9min, data=0.1min (8%), compute=1.7min (92%)
+12:23:18 - INFO -    Epoch 17/20: train_loss=0.675501, valid_loss=0.592483, lr=1.25e-04
+12:23:18 - INFO -    Timing: epoch=1.9min, data=0.2min (8%), compute=1.7min (92%)
+12:25:25 - INFO -    Epoch 18/20: train_loss=0.675347, valid_loss=0.593518, lr=1.25e-04
+12:25:25 - INFO -    Timing: epoch=1.9min, data=0.2min (8%), compute=1.7min (92%)
+12:27:31 - INFO -    Epoch 19/20: train_loss=0.675013, valid_loss=0.592321, lr=6.25e-05
+12:27:31 - INFO -    Timing: epoch=1.8min, data=0.1min (8%), compute=1.7min (92%)
+12:29:38 - INFO -    Epoch 20/20: train_loss=0.673828, valid_loss=0.591973, lr=6.25e-05
+12:29:38 - INFO -    Timing: epoch=1.8min, data=0.2min (8%), compute=1.7min (92%)
+12:29:38 - INFO -    Training complete: duration=42.3min, best_epoch=20, best_loss=0.591973
+12:29:38 - INFO -       Attempting to save baseline_nonlocal_horizontal.pth...
+12:29:38 - INFO -          File write successful
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           Epoch ▁▁▂▂▂▃▃▄▄▄▅▅▅▆▆▇▇▇██
+wandb:   Learning rate ████████▄▄▄▄▄▄▂▂▂▂▁▁
+wandb:   Training loss █▆▅▄▄▄▃▃▃▂▂▂▂▂▂▁▁▁▁▁
+wandb: Validation loss █▇▃▆▃▂▄▃▆▂▂▁▂▂▃▁▁▂▁▁
+wandb: 
+wandb: Run summary:
+wandb: Best validation loss 0.59197
+wandb:                Epoch 20
+wandb:        Learning rate 6e-05
+wandb:        Training loss 0.67383
+wandb:      Validation loss 0.59197
+wandb: 
+wandb: 🚀 View run baseline_nonlocal_horizontal at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/e72euw85
+wandb: ⭐️ View project at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260114_114718-e72euw85/logs

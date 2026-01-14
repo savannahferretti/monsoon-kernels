@@ -73,16 +73,16 @@ class DataCalculator:
 
     def regrid(self,da):
         '''
-        Purpose: Regrid a DataArray to 1.0° × 1.0° grid extending one grid cell beyond the target domain.
+        Purpose: Regrid a DataArray to 1.0° × 1.0° grid over the target domain.
         Args:
         - da (xr.DataArray): input DataArray with radius (for better interpolation)
         Returns:
         - xr.DataArray: regridded DataArray
         '''
-        targetlats = np.arange(self.latrange[0]-1.0,self.latrange[1]+2.0,1.0)
-        targetlons = np.arange(self.lonrange[0]-1.0,self.lonrange[1]+2.0,1.0)
+        targetlats = np.arange(self.latrange[0],self.latrange[1]+1.0,1.0)
+        targetlons = np.arange(self.lonrange[0],self.lonrange[1]+1.0,1.0)
         targetgrid = xr.Dataset({'lat':(['lat'],targetlats),'lon':(['lon'],targetlons)})
-        regridder  = xesmf.Regridder(da,targetgrid,method='bilinear')
+        regridder  = xesmf.Regridder(da,targetgrid,method='conservative')
         da = regridder(da,keep_attrs=True)
         return da
 

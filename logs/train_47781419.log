@@ -1,0 +1,71 @@
+Training model: kernel_nonparametric_vertical
+12:59:29 - INFO - Spinning up...
+12:59:30 - INFO - Preparing data splits...
+13:01:05 - INFO - Common domain constraints: maxradius = 1, maxtimelag = 6
+13:01:05 - INFO - Training `kernel_nonparametric_vertical`...
+13:01:23 - INFO -    Training samples: 18245814, Validation samples: 3646518
+13:01:23 - INFO -    Training batches: 36492, Validation batches: 7294
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260114_130124-hs92ff4m
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run kernel_nonparametric_vertical
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/hs92ff4m
+13:04:26 - INFO -    Epoch 1/20: train_loss=0.643528, valid_loss=0.522363, lr=5.00e-04
+13:04:26 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:07:24 - INFO -    Epoch 2/20: train_loss=0.624882, valid_loss=0.514232, lr=5.00e-04
+13:07:24 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:10:23 - INFO -    Epoch 3/20: train_loss=0.618169, valid_loss=0.509933, lr=5.00e-04
+13:10:23 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:13:21 - INFO -    Epoch 4/20: train_loss=0.614387, valid_loss=0.511947, lr=5.00e-04
+13:13:21 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:16:23 - INFO -    Epoch 5/20: train_loss=0.611477, valid_loss=0.510265, lr=5.00e-04
+13:16:23 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.6min (93%)
+13:19:22 - INFO -    Epoch 6/20: train_loss=0.609008, valid_loss=0.509682, lr=5.00e-04
+13:19:22 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:22:17 - INFO -    Epoch 7/20: train_loss=0.606895, valid_loss=0.504552, lr=5.00e-04
+13:22:17 - INFO -    Timing: epoch=2.6min, data=0.2min (7%), compute=2.5min (93%)
+13:25:14 - INFO -    Epoch 8/20: train_loss=0.605170, valid_loss=0.502315, lr=5.00e-04
+13:25:14 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:28:12 - INFO -    Epoch 9/20: train_loss=0.603646, valid_loss=0.501494, lr=5.00e-04
+13:28:12 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:31:10 - INFO -    Epoch 10/20: train_loss=0.602350, valid_loss=0.503093, lr=5.00e-04
+13:31:10 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:34:07 - INFO -    Epoch 11/20: train_loss=0.601165, valid_loss=0.503358, lr=5.00e-04
+13:34:07 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:37:05 - INFO -    Epoch 12/20: train_loss=0.600147, valid_loss=0.499693, lr=5.00e-04
+13:37:05 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:40:03 - INFO -    Epoch 13/20: train_loss=0.599211, valid_loss=0.501828, lr=5.00e-04
+13:40:03 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:43:03 - INFO -    Epoch 14/20: train_loss=0.598506, valid_loss=0.499748, lr=5.00e-04
+13:43:03 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:46:02 - INFO -    Epoch 15/20: train_loss=0.597795, valid_loss=0.504850, lr=2.50e-04
+13:46:02 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:48:59 - INFO -    Epoch 16/20: train_loss=0.594264, valid_loss=0.501043, lr=2.50e-04
+13:48:59 - INFO -    Timing: epoch=2.7min, data=0.2min (7%), compute=2.5min (93%)
+13:48:59 - INFO -    Training complete: duration=47.5min, best_epoch=12, best_loss=0.499693
+13:48:59 - INFO -       Attempting to save kernel_nonparametric_vertical.pth...
+13:48:59 - INFO -          File write successful
+wandb: uploading data; updating run metadata; uploading output.log; uploading wandb-summary.json
+wandb: uploading data
+wandb: uploading history steps 15-15, summary, console lines 30-34
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           Epoch ▁▁▂▂▃▃▄▄▅▅▆▆▇▇██
+wandb:   Learning rate ██████████████▁▁
+wandb:   Training loss █▅▄▄▃▃▃▃▂▂▂▂▂▂▂▁
+wandb: Validation loss █▅▄▅▄▄▃▂▂▂▂▁▂▁▃▁
+wandb: 
+wandb: Run summary:
+wandb: Best validation loss 0.49969
+wandb:                Epoch 16
+wandb:        Learning rate 0.00025
+wandb:        Training loss 0.59426
+wandb:      Validation loss 0.50104
+wandb: 
+wandb: 🚀 View run kernel_nonparametric_vertical at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/hs92ff4m
+wandb: ⭐️ View project at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260114_130124-hs92ff4m/logs

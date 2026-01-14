@@ -1,0 +1,66 @@
+Training model: baseline_nonlocal_vertical
+08:59:17 - INFO - Spinning up...
+08:59:17 - INFO - Preparing data splits...
+09:00:50 - INFO - Common domain constraints: maxradius = 1, maxtimelag = 6
+09:00:50 - INFO - Training `baseline_nonlocal_vertical`...
+09:01:12 - INFO -    Training samples: 18245814, Validation samples: 3646518
+09:01:12 - INFO -    Training batches: 36492, Validation batches: 7294
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260114_090113-vrxq0spx
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run baseline_nonlocal_vertical
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/vrxq0spx
+09:03:27 - INFO -    Epoch 1/20: train_loss=0.624265, valid_loss=0.509554, lr=5.00e-04
+09:03:27 - INFO -    Timing: epoch=1.9min, data=0.2min (8%), compute=1.7min (92%)
+09:05:38 - INFO -    Epoch 2/20: train_loss=0.609715, valid_loss=0.502919, lr=5.00e-04
+09:05:38 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.8min (91%)
+09:07:49 - INFO -    Epoch 3/20: train_loss=0.604351, valid_loss=0.501971, lr=5.00e-04
+09:07:49 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.8min (91%)
+09:10:02 - INFO -    Epoch 4/20: train_loss=0.601016, valid_loss=0.501032, lr=5.00e-04
+09:10:02 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.8min (91%)
+09:12:16 - INFO -    Epoch 5/20: train_loss=0.598641, valid_loss=0.498812, lr=5.00e-04
+09:12:16 - INFO -    Timing: epoch=2.0min, data=0.2min (9%), compute=1.8min (91%)
+09:14:28 - INFO -    Epoch 6/20: train_loss=0.596815, valid_loss=0.499596, lr=5.00e-04
+09:14:28 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.8min (91%)
+09:16:39 - INFO -    Epoch 7/20: train_loss=0.595133, valid_loss=0.498001, lr=5.00e-04
+09:16:39 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.7min (91%)
+09:18:50 - INFO -    Epoch 8/20: train_loss=0.594000, valid_loss=0.501595, lr=5.00e-04
+09:18:50 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.8min (91%)
+09:21:03 - INFO -    Epoch 9/20: train_loss=0.592989, valid_loss=0.497849, lr=5.00e-04
+09:21:03 - INFO -    Timing: epoch=2.0min, data=0.2min (9%), compute=1.8min (91%)
+09:23:15 - INFO -    Epoch 10/20: train_loss=0.592030, valid_loss=0.499620, lr=5.00e-04
+09:23:15 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.8min (91%)
+09:25:27 - INFO -    Epoch 11/20: train_loss=0.591302, valid_loss=0.498151, lr=5.00e-04
+09:25:27 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.8min (91%)
+09:27:39 - INFO -    Epoch 12/20: train_loss=0.590645, valid_loss=0.502334, lr=2.50e-04
+09:27:39 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.8min (91%)
+09:29:48 - INFO -    Epoch 13/20: train_loss=0.585080, valid_loss=0.498226, lr=2.50e-04
+09:29:48 - INFO -    Timing: epoch=1.9min, data=0.2min (9%), compute=1.7min (91%)
+09:29:48 - INFO -    Training complete: duration=28.5min, best_epoch=9, best_loss=0.497849
+09:29:48 - INFO -       Attempting to save baseline_nonlocal_vertical.pth...
+09:29:49 - INFO -          File write successful
+wandb: updating run metadata; uploading wandb-summary.json
+wandb: updating run metadata
+wandb: updating run metadata; uploading history steps 12-12, summary, console lines 24-28
+wandb: uploading history steps 12-12, summary, console lines 24-28
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           Epoch ▁▂▂▃▃▄▅▅▆▆▇▇█
+wandb:   Learning rate ███████████▁▁
+wandb:   Training loss █▅▄▄▃▃▃▃▂▂▂▂▁
+wandb: Validation loss █▄▃▃▂▂▁▃▁▂▁▄▁
+wandb: 
+wandb: Run summary:
+wandb: Best validation loss 0.49785
+wandb:                Epoch 13
+wandb:        Learning rate 0.00025
+wandb:        Training loss 0.58508
+wandb:      Validation loss 0.49823
+wandb: 
+wandb: 🚀 View run baseline_nonlocal_vertical at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/vrxq0spx
+wandb: ⭐️ View project at: https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260114_090113-vrxq0spx/logs

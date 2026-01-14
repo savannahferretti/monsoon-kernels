@@ -1,0 +1,30 @@
+Training model: kernel_gaussian_vertical
+14:41:26 - INFO - Spinning up...
+14:41:27 - INFO - Preparing data splits...
+14:43:02 - INFO - Common domain constraints: maxradius = 1, maxtimelag = 6
+14:43:02 - INFO - Training `kernel_gaussian_vertical`...
+14:43:27 - INFO -    Training samples: 18245814, Validation samples: 3646518
+14:43:27 - INFO -    Training batches: 36492, Validation batches: 7294
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260114_144328-8fxyr4vp
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run kernel_gaussian_vertical
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/8fxyr4vp
+14:46:45 - INFO -    Epoch 1/20: train_loss=0.660098, valid_loss=0.545246, lr=5.00e-04
+14:46:45 - INFO -    Timing: epoch=2.9min, data=0.2min (7%), compute=2.7min (93%)
+14:49:53 - INFO -    Epoch 2/20: train_loss=0.647470, valid_loss=0.546760, lr=5.00e-04
+14:49:53 - INFO -    Timing: epoch=2.8min, data=0.2min (6%), compute=2.7min (94%)
+14:53:00 - INFO -    Epoch 3/20: train_loss=0.645381, valid_loss=0.546682, lr=5.00e-04
+14:53:00 - INFO -    Timing: epoch=2.8min, data=0.2min (6%), compute=2.6min (94%)
+14:56:07 - INFO -    Epoch 4/20: train_loss=0.644452, valid_loss=0.539763, lr=5.00e-04
+14:56:07 - INFO -    Timing: epoch=2.8min, data=0.2min (6%), compute=2.6min (94%)
+14:59:18 - INFO -    Epoch 5/20: train_loss=0.643564, valid_loss=0.540308, lr=5.00e-04
+14:59:18 - INFO -    Timing: epoch=2.9min, data=0.2min (6%), compute=2.7min (94%)
+15:02:29 - INFO -    Epoch 6/20: train_loss=0.643018, valid_loss=0.540993, lr=5.00e-04
+15:02:29 - INFO -    Timing: epoch=2.9min, data=0.2min (6%), compute=2.7min (94%)
+15:05:35 - INFO -    Epoch 7/20: train_loss=0.642552, valid_loss=0.537498, lr=5.00e-04
+15:05:35 - INFO -    Timing: epoch=2.8min, data=0.2min (6%), compute=2.6min (94%)
+15:08:44 - INFO -    Epoch 8/20: train_loss=0.642180, valid_loss=0.538499, lr=5.00e-04
+15:08:44 - INFO -    Timing: epoch=2.9min, data=0.2min (6%), compute=2.7min (94%)

@@ -70,7 +70,7 @@ if __name__=='__main__':
     splitdata    = PatchDataLoader.prepare(['train','valid'],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
     maxradius = max(m['patch']['radius'] for m in config.models)
     maxtimelag = max(m['patch']['timelag'] for m in config.models)
-    logger.info(f'Common domain constraints: maxradius={maxradius}, maxtimelag={maxtimelag}')
+    logger.info(f'Common domain constraints: maxradius = {maxradius}, maxtimelag = {maxtimelag}')
     cachedconfig = None
     cachedresult = None
     for modelconfig in config.models:
