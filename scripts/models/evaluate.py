@@ -169,7 +169,7 @@ def inference(model,split,result,uselocal,device):
 
 if __name__=='__main__':
     logger.info('Spinning up...')
-    device       = setup()
+    device = setup()
     models,split = parse()
     logger.info('Preparing evaluation split...')
     splitdata = PatchDataLoader.prepare([split],FIELDVARS,LOCALVARS,TARGETVAR,SPLITDIR)
@@ -183,52 +183,50 @@ if __name__=='__main__':
         kind = modelconfig['kind']
         if models is not None and name not in models:
             continue
-
-        logger.info(f'Evaluating `{name}`...')
-
-        patchconfig   = modelconfig['patch']
-        uselocal      = modelconfig['uselocal']
-        currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
-
-        if currentconfig==cachedconfig:
-            result = cachedresult
-        else:
-            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,maxradius,maxtimelag)
-            cachedconfig = currentconfig
-            cachedresult = result
-
-        model = load(name,modelconfig,result,device)
-        if model is None:
-            continue
-
-        info = inference(model,split,result,uselocal,device)
-        centers = result['centers'][split]
-        refda = splitdata[split]['refda']
-        patchshape = result['geometry'].shape()
-        logger.info('   Formatting/saving predictions...')
-        arr,meta = out.to_array(info['predictions'],'predictions',
-            centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
-        ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-        out.save(name,ds,'predictions',split,PREDSDIR)
-        del arr,meta,ds
-        if info['havekernel']:
-            logger.info('   Formatting/saving normalized kernel weights...')
-            refds = xr.open_dataset(os.path.join(SPLITDIR,'valid.h5'),engine='h5netcdf')
-            arr,meta = out.to_array(
-                info['weights'],'weights',
-                kerneldims=info['kerneldims'],
-                nonparam=info['nonparam'])
-            ds = out.to_dataset(arr,meta,refds=refds,component_weights=info['component_weights'])
-            out.save(name,ds,'weights',split,WEIGHTSDIR)
+        seeds = modelconfig.get('seeds',[SEED])
+        for seed in seeds:
+            modelname = f'{name}_seed{seed}' if len(seeds)>1 else name
+            logger.info(f'Evaluating `{modelname}`...')
+            patchconfig = modelconfig['patch']
+            uselocal = modelconfig['uselocal']
+            currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
+            if currentconfig==cachedconfig:
+                result = cachedresult
+            else:
+                result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,maxradius,maxtimelag)
+                cachedconfig = currentconfig
+                cachedresult = result
+            model = load(modelname,modelconfig,result,device)
+            if model is None:
+                continue
+            info = inference(model,split,result,uselocal,device)
+            centers = result['centers'][split]
+            refda = splitdata[split]['refda']
+            patchshape = result['geometry'].shape()
+            logger.info('   Formatting/saving predictions...')
+            arr,meta = out.to_array(info['predictions'],'predictions',
+                centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
+            ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
+            out.save(modelname,ds,'predictions',split,PREDSDIR)
             del arr,meta,ds
-            if info['features'] is not None:
-                logger.info('   Formatting/saving kernel-integrated features...')
+            if info['havekernel']:
+                logger.info('   Formatting/saving normalized kernel weights...')
+                refds = xr.open_dataset(os.path.join(SPLITDIR,'valid.h5'),engine='h5netcdf')
                 arr,meta = out.to_array(
-                    info['features'],'features',
-                    centers=centers,refda=refda,nkernels=info['nkernels'],
-                    kerneldims=info['kerneldims'],patchshape=patchshape,
+                    info['weights'],'weights',
+                    kerneldims=info['kerneldims'],
                     nonparam=info['nonparam'])
-                ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-                out.save(name,ds,'features',split,FEATSDIR)
+                ds = out.to_dataset(arr,meta,refds=refds,component_weights=info['component_weights'])
+                out.save(modelname,ds,'weights',split,WEIGHTSDIR)
                 del arr,meta,ds
-        del model
+                if info['features'] is not None:
+                    logger.info('   Formatting/saving kernel-integrated features...')
+                    arr,meta = out.to_array(
+                        info['features'],'features',
+                        centers=centers,refda=refda,nkernels=info['nkernels'],
+                        kerneldims=info['kerneldims'],patchshape=patchshape,
+                        nonparam=info['nonparam'])
+                    ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
+                    out.save(modelname,ds,'features',split,FEATSDIR)
+                    del arr,meta,ds
+            del model

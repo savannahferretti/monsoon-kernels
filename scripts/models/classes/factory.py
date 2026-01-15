@@ -18,17 +18,17 @@ class ModelFactory:
         Returns:
         - torch.nn.Module: initialized model
         '''
-        kind     = modelconfig['kind']
+        kind = modelconfig['kind']
         uselocal = modelconfig['uselocal']
         if kind=='baseline':
             model = BaselineNN(patchshape,nfieldvars,nlocalvars,uselocal)
         elif kind=='nonparametric':
-            nkernels   = modelconfig['nkernels']
+            nkernels = modelconfig.get('nkernels',1)
             kerneldims = modelconfig['kerneldims']
-            intkernel  = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims,patchshape)
+            intkernel = NonparametricKernelLayer(nfieldvars,nkernels,kerneldims,patchshape)
             model = KernelNN(intkernel,nlocalvars,uselocal,patchshape)
         elif kind=='parametric':
-            nkernels   = modelconfig['nkernels']
+            nkernels = modelconfig.get('nkernels',1)
             kerneldict = modelconfig['kerneldict']
             intkernel = ParametricKernelLayer(nfieldvars,nkernels,kerneldict)
             model = KernelNN(intkernel,nlocalvars,uselocal,patchshape)

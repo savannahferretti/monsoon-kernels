@@ -64,10 +64,9 @@ def initialize(name,modelconfig,result,device,fieldvars,localvars):
 if __name__=='__main__':
     config = Config()
     logger.info('Spinning up...')
-    device = setup(config.seed)
     models = parse()
     logger.info('Preparing data splits...')
-    splitdata    = PatchDataLoader.prepare(['train','valid'],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
+    splitdata = PatchDataLoader.prepare(['train','valid'],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
     maxradius = max(m['patch']['radius'] for m in config.models)
     maxtimelag = max(m['patch']['timelag'] for m in config.models)
     logger.info(f'Common domain constraints: maxradius={maxradius}, maxtimelag={maxtimelag}')
@@ -78,31 +77,35 @@ if __name__=='__main__':
         kind = modelconfig['kind']
         if models is not None and name not in models:
             continue
-        logger.info(f'Training `{name}`...')
-        patchconfig   = modelconfig['patch']
-        uselocal      = modelconfig['uselocal']
-        currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
-        if currentconfig==cachedconfig:
-            result = cachedresult
-        else:
-            result = PatchDataLoader.dataloaders(
-                splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device,maxradius,maxtimelag)
-            cachedconfig = currentconfig
-            cachedresult = result
-        model = initialize(name,modelconfig,result,device,config.fieldvars,config.localvars)
-        trainer = Trainer(
-            model=model,
-            trainloader=result['loaders']['train'],
-            validloader=result['loaders']['valid'],
-            device=device,
-            modeldir=config.modelsdir,
-            project=config.projectname,
-            lr=config.learningrate,
-            patience=config.patience,
-            criterion=config.criterion,
-            epochs=config.epochs,
-            use_amp=True,
-            grad_accum_steps=1,
-            compile_model=False)
-        trainer.fit(name,kind,uselocal)
-        del model,trainer
+        seeds = modelconfig.get('seeds',[config.seed])
+        for seed in seeds:
+            modelname = f'{name}_seed{seed}' if len(seeds)>1 else name
+            logger.info(f'Training `{modelname}`...')
+            device = setup(seed)
+            patchconfig = modelconfig['patch']
+            uselocal = modelconfig['uselocal']
+            currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
+            if currentconfig==cachedconfig:
+                result = cachedresult
+            else:
+                result = PatchDataLoader.dataloaders(
+                    splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device,maxradius,maxtimelag)
+                cachedconfig = currentconfig
+                cachedresult = result
+            model = initialize(name,modelconfig,result,device,config.fieldvars,config.localvars)
+            trainer = Trainer(
+                model=model,
+                trainloader=result['loaders']['train'],
+                validloader=result['loaders']['valid'],
+                device=device,
+                modeldir=config.modelsdir,
+                project=config.projectname,
+                lr=config.learningrate,
+                patience=config.patience,
+                criterion=config.criterion,
+                epochs=config.epochs,
+                use_amp=True,
+                grad_accum_steps=1,
+                compile_model=False)
+            trainer.fit(modelname,kind,uselocal)
+            del model,trainer
