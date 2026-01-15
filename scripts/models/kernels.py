@@ -205,14 +205,22 @@ class ParametricKernelLayer(torch.nn.Module):
             - nfieldvars (int): number of predictor fields
             - nkernels (int): number of kernels to learn per predictor field
             Notes:
-            - Implements k^(TH)_s(s; s₁, s₂) = I(s ∈ [s₁, s₂]) / normalization
-            - Parameters s₁ and s₂ are learned bounds in normalized coordinate space [-1, 1]
-            - Assigns uniform weight within [s₁, s₂], zero outside
+            - Implements k^(TH)_s(s; c, w) = I(s ∈ [c-w, c+w]) / normalization
+            - Parameters: center c ∈ [-1, 1] and half-width w > 0
+            - Randomly initialized so each field/kernel starts at different location
+            - Layer can extend to domain edges (clipped to [-1, 1])
             '''
             super().__init__()
-            # Initialize bounds to cover middle 50% of domain
-            self.lower = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)), -0.5))
-            self.upper = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)), 0.5))
+            nfieldvars = int(nfieldvars)
+            nkernels = int(nkernels)
+
+            # Randomly initialize center positions across the full domain
+            # Each field/kernel gets a different random center in [-1, 1]
+            self.center = torch.nn.Parameter(torch.rand(nfieldvars, nkernels) * 2.0 - 1.0)
+
+            # Initialize half-width in log space for better gradient behavior
+            # Starts around 0.3-0.5 in linear space (reasonable layer thickness)
+            self.loghalfwidth = torch.nn.Parameter(torch.randn(nfieldvars, nkernels) * 0.3 - 1.0)
 
         def forward(self,length,device):
             '''
@@ -224,18 +232,22 @@ class ParametricKernelLayer(torch.nn.Module):
             - torch.Tensor: top-hat kernel values with shape (nfieldvars, nkernels, length)
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
-            - For vertical: defines pressure layer between p₁ and p₂
-            - Indicator function: I(s ∈ [s₁, s₂])
+            - Center can be anywhere in [-1, 1] (TOA to surface)
+            - Half-width controls layer thickness
+            - Layer can extend to/beyond edges (clipped to [-1, 1])
+            - Example: center=0.5, halfwidth=0.3 gives layer from 0.2 to 0.8 (mid-to-low troposphere)
             '''
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
 
-            # Ensure lower < upper by using sorted bounds
-            s1 = torch.min(self.lower, self.upper)
-            s2 = torch.max(self.lower, self.upper)
+            # Convert log half-width to linear, clamp to reasonable range
+            halfwidth = torch.exp(self.loghalfwidth).clamp(min=0.1, max=1.5)
+
+            # Compute bounds (allow extending beyond [-1, 1], will be clipped by coordinate range)
+            s1 = self.center[...,None] - halfwidth[...,None]
+            s2 = self.center[...,None] + halfwidth[...,None]
 
             # Indicator function: 1 if s ∈ [s₁, s₂], 0 otherwise
-            kernel1d = ((coord[None,None,:] >= s1[...,None]) &
-                       (coord[None,None,:] <= s2[...,None])).float()
+            kernel1d = ((coord[None,None,:] >= s1) & (coord[None,None,:] <= s2)).float()
 
             # Add small epsilon to avoid all-zero kernels
             kernel1d = kernel1d + 1e-8
