@@ -250,13 +250,16 @@ class ParametricKernelLayer(torch.nn.Module):
             - nfieldvars (int): number of predictor fields
             - nkernels (int): number of kernels to learn per predictor field
             Notes:
-            - Implements k^(EXP)(τ; τ₀) = exp(-τ/τ₀) · I(τ ∈ [0, τ_max]) / normalization
+            - Implements k^(EXP)(τ; τ₀, d) = exp(-τ/τ₀) · I(τ ∈ [0, τ_max]) / normalization
             - Parameter τ₀ (timescale) controls decay rate
+            - Parameter d (direction) controls whether decay is from TOA or surface:
+              * d → -∞ (sigmoid→0): decay from TOA downward (τ=0 at top, increases toward surface)
+              * d → +∞ (sigmoid→1): decay from surface upward (τ=0 at bottom, increases toward TOA)
             - For time: τ = t₀ - t (lag from present)
-            - For vertical: τ = distance from surface or TOA
             '''
             super().__init__()
             self.logtau = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
+            self.direction = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
 
         def forward(self,length,device):
             '''
@@ -267,14 +270,29 @@ class ParametricKernelLayer(torch.nn.Module):
             Returns:
             - torch.Tensor: exponential kernel values with shape (nfieldvars, nkernels, length)
             Notes:
-            - Uses lag coordinates τ ∈ [0, 1, 2, ..., length-1]
-            - For time: τ=0 is present, τ increasing is further into past
-            - For vertical: τ=0 could be surface, τ increasing is upward
+            - Coordinate convention (matching GaussianKernel): index 0 = TOA, index (length-1) = surface
+            - Direction parameter determines lag direction:
+              * direction < 0: lag from TOA (0, 1, 2, ..., length-1) — peaks at TOA
+              * direction > 0: lag from surface (length-1, ..., 2, 1, 0) — peaks at surface
             - Decay timescale τ₀ = exp(logtau)
+            - Uses differentiable sigmoid blending for smooth gradient flow
             '''
             coord = torch.arange(length,device=device,dtype=torch.float32)
             tau = torch.exp(self.logtau)+1e-4
-            kernel1d = torch.exp(-coord[None,None,:]/tau[...,None])
+
+            # Convert direction parameter to weight in [0, 1] via sigmoid
+            # from_surface ≈ 0: decay from TOA (coord = 0, 1, 2, ...)
+            # from_surface ≈ 1: decay from surface (coord = length-1, ..., 2, 1, 0)
+            from_surface = torch.sigmoid(self.direction)
+
+            # Compute lag from both directions
+            lag_from_top = coord[None,None,:]  # 0, 1, 2, ..., length-1
+            lag_from_bottom = (length-1) - coord[None,None,:]  # length-1, ..., 2, 1, 0
+
+            # Interpolate between the two lag directions
+            lag = (1.0 - from_surface[...,None]) * lag_from_top + from_surface[...,None] * lag_from_bottom
+
+            kernel1d = torch.exp(-lag/tau[...,None])
             return kernel1d
 
     class CosineKernel(torch.nn.Module):
