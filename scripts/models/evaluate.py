@@ -3,6 +3,7 @@
 import os
 import time
 import torch
+import inspect
 import logging
 import argparse
 import numpy as np
@@ -127,6 +128,7 @@ def inference(model,split,result,uselocal,device):
     predslist = []
     featslist = []
     weights = None
+    component_weights = None 
     with torch.no_grad():
         for batch in dataloader:
             fieldpatch = batch['fieldpatch'].to(device)
@@ -141,13 +143,19 @@ def inference(model,split,result,uselocal,device):
                     if model.intkernel.weights is None:
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
                     weights = model.intkernel.weights.detach().cpu().numpy()
-                    # Compute component weights for mixture kernels (only for parametric kernels)
+                    # Robust component-weight extraction (parametric kernels only)
                     component_weights = None
-                    if hasattr(model.intkernel, 'get_weights'):
-                        # Parametric kernel: explicitly compute components
-                        _ = model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,device,compute_components=True)
-                        if model.intkernel.component_weights is not None:
-                            component_weights = model.intkernel.component_weights.detach().cpu().numpy()
+                    if hasattr(model.intkernel, ="get_weights"):
+                        try:
+                            sig = inspect.signature(model.intkernel.get_weights)
+                            if "compute_components" in sig.parameters:
+                                _ = model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,device,compute_components=True)
+                            else:
+                                _ = model.intkernel.get_weights(dareapatch, dlevfull, dtimepatch, device)
+                        except TypeError:
+                            _ = model.intkernel.get_weights(dareapatch, dlevfull, dtimepatch, device)
+                        if getattr(model.intkernel, "component_weights", None) is not None:
+                            component_weights = (model.intkernel.component_weights.detach().cpu().numpy())                    
                 if model.intkernel.features is not None:
                     featslist.append(model.intkernel.features.detach().cpu().numpy())
             else:
@@ -183,24 +191,19 @@ if __name__=='__main__':
         kind = modelconfig['kind']
         if models is not None and name not in models:
             continue
-
         logger.info(f'Evaluating `{name}`...')
-
         patchconfig   = modelconfig['patch']
         uselocal      = modelconfig['uselocal']
         currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
-
         if currentconfig==cachedconfig:
             result = cachedresult
         else:
             result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,maxradius,maxtimelag)
             cachedconfig = currentconfig
             cachedresult = result
-
         model = load(name,modelconfig,result,device)
         if model is None:
             continue
-
         info = inference(model,split,result,uselocal,device)
         centers = result['centers'][split]
         refda = splitdata[split]['refda']
@@ -221,14 +224,4 @@ if __name__=='__main__':
             ds = out.to_dataset(arr,meta,refds=refds,component_weights=info['component_weights'])
             out.save(name,ds,'weights',split,WEIGHTSDIR)
             del arr,meta,ds
-            if info['features'] is not None:
-                logger.info('   Formatting/saving kernel-integrated features...')
-                arr,meta = out.to_array(
-                    info['features'],'features',
-                    centers=centers,refda=refda,nkernels=info['nkernels'],
-                    kerneldims=info['kerneldims'],patchshape=patchshape,
-                    nonparam=info['nonparam'])
-                ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-                out.save(name,ds,'features',split,FEATSDIR)
-                del arr,meta,ds
         del model
