@@ -1,0 +1,16 @@
+Training model: baseline_local
+10:47:40 - INFO - Spinning up...
+10:47:41 - INFO - Preparing data splits...
+10:49:20 - INFO - Common domain constraints: maxradius = 1, maxtimelag = 6
+10:49:20 - INFO - Training `baseline_local`...
+10:49:38 - INFO -    Training samples: 18245814, Validation samples: 3646518
+10:49:38 - INFO -    Training batches: 36492, Validation batches: 7294
+wandb: Currently logged in as: savannahferretti (savannah-research) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.21.1
+wandb: Run data is saved locally in /global/cfs/cdirs/m4334/sferrett/monsoon-kernels/wandb/run-20260116_104938-ac47rnqc
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run baseline_local
+wandb: ⭐️ View project at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments
+wandb: 🚀 View run at https://wandb.ai/savannah-research/%20Integration%20Kernel%20Model%20Experiments/runs/ac47rnqc
+10:52:00 - INFO -    Epoch 1/20: train_loss=0.731033, valid_loss=0.622874, lr=5.00e-04
+10:52:00 - INFO -    Timing: epoch=2.0min, data=0.2min (9%), compute=1.9min (91%)
