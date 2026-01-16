@@ -30,8 +30,8 @@
     "target":"pr"
   },
   "training":{
-    "projectname":" Integration Kernel Model Experiments",
-    "seeds":[42,123,456],
+    "projectname":"Data-Driven Integration Kernel Experiments",
+    "seeds":[42],
     "workers":8,
     "epochs":20,
     "batchsize":500,
