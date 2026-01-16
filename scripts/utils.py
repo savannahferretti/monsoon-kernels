@@ -112,8 +112,8 @@ class Config:
         return self.training['projectname']
         
     @property
-    def seed(self):
-        return int(self.training['seed'])
+    def seeds(self):
+        return self.training['seeds']
 
     @property
     def workers(self):
