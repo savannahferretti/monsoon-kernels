@@ -394,8 +394,8 @@ class ParametricKernelLayer(torch.nn.Module):
         - kerneldict (dict[str,str|list[str]]): mapping of dimensions to kernel type(s)
           Supports two formats:
           1. Single kernel for all fields: {"lev": "gaussian"}
-          2. Per-field kernels: {"lev": ["exponential", "gaussian", "mixture"]}
-          Valid kernel types: 'gaussian', 'tophat', 'exponential', 'mixture'
+          2. Per-field kernels: {"lev": ["exponential", "gaussian", "mixgaussian"]}
+          Valid kernel types: 'gaussian', 'tophat', 'exponential', 'mixgaussian'
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
@@ -449,10 +449,10 @@ class ParametricKernelLayer(torch.nn.Module):
             return self.TopHatKernel(nfieldvars,nkernels,dim)
         elif function=='exponential':
             return self.ExponentialKernel(nfieldvars,nkernels,dim)
-        elif function=='mixture':
+        elif function=='mixgaussian':
             return self.MixtureGaussianKernel(nfieldvars,nkernels,dim)
         else:
-            raise ValueError(f'Unknown function type `{function}`; must be `gaussian`, `tophat`, `exponential`, or `mixture`')
+            raise ValueError(f'Unknown function type `{function}`; must be `gaussian`, `tophat`, `exponential`, or `mixgaussian`')
 
     def get_weights(self,dareapatch,dlevfull,dtimepatch,device,compute_components=False):
         '''

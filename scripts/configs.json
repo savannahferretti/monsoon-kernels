@@ -31,7 +31,7 @@
   },
   "training":{
     "projectname":" Integration Kernel Model Experiments",
-    "seed":42,
+    "seeds":[42,123,456],
     "workers":8,
     "epochs":20,
     "batchsize":500,
@@ -90,11 +90,11 @@
          "patch":{"radius":0,"levmode":"column","timelag":0},
          "uselocal":true,
          "kerneldict":{"lev":"tophat"}},
-    {"name":"kernel_mixture_vertical",
+    {"name":"kernel_mixgaussian_vertical",
          "kind":"parametric",
          "description":"($\\mathbf{x}_0$, $\\mathit{p}^\\mathrm{MG}$, $\\mathit{t}_0$)",
          "patch":{"radius":0,"levmode":"column","timelag":0},
          "uselocal":true,
-         "kerneldict":{"lev":"mixture"}}
+         "kerneldict":{"lev":"mixgaussian"}}
   ]
 }

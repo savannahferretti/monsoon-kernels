@@ -25,7 +25,7 @@ LOCALVARS  = config.localvars
 TARGETVAR  = config.targetvar
 LATRANGE   = config.latrange
 LONRANGE   = config.lonrange
-SEED       = config.seed
+SEED       = config.seeds[0]
 BATCHSIZE  = config.batchsize
 WORKERS    = config.workers
 
@@ -183,7 +183,7 @@ if __name__=='__main__':
         kind = modelconfig['kind']
         if models is not None and name not in models:
             continue
-        seeds = modelconfig.get('seeds',[SEED])
+        seeds = modelconfig.get('seeds',config.seeds)
         for seed in seeds:
             modelname = f'{name}_seed{seed}' if len(seeds)>1 else name
             logger.info(f'Evaluating `{modelname}`...')
