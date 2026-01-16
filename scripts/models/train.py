@@ -100,6 +100,7 @@ if __name__=='__main__':
                 device=device,
                 modeldir=config.modelsdir,
                 project=config.projectname,
+                seed=seed,
                 lr=config.learningrate,
                 patience=config.patience,
                 criterion=config.criterion,
