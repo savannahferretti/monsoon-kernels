@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class Trainer:
 
-    def __init__(self,model,trainloader,validloader,device,modeldir,project,lr=1e-3,patience=5,
+    def __init__(self,model,trainloader,validloader,device,modeldir,project,seed,lr=1e-3,patience=5,
                  criterion='MSELoss',epochs=100,use_amp=True,grad_accum_steps=1,compile_model=False):
         '''
         Purpose: Initialize Trainer with model, dataloaders, and training configuration.
@@ -22,6 +22,7 @@ class Trainer:
         - device (str): device to use (cuda or cpu)
         - modeldir (str): output directory for checkpoints
         - project (str): project name for Weights & Biases logging
+        - seed (int): random seed for reproducibility
         - lr (float): initial learning rate (defaults to 1e-3)
         - patience (int): early stopping patience (defaults to 5)
         - criterion (str): loss function name (defaults to MSELoss)
@@ -36,6 +37,7 @@ class Trainer:
         self.device         = device
         self.modeldir       = modeldir
         self.project        = project
+        self.seed           = seed
         self.lr             = lr
         self.patience       = patience
         self.epochs         = epochs
@@ -182,8 +184,8 @@ class Trainer:
         logger.info(f'   Training batches: {len(self.trainloader)}, Validation batches: {len(self.validloader)}')
         wandb.init(project=self.project,name=name,
                    config={
+                       'Seed':self.seed,
                        'Epochs':self.epochs,
-                       'Batch size':self.trainloader.batch_size,
                        'Effective batch size':self.trainloader.batch_size*self.grad_accum_steps,
                        'Initial learning rate':self.lr,
                        'Early stopping patience':self.patience,
