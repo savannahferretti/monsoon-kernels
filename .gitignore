@@ -26,3 +26,5 @@ data/weights/*
 *.pth
 *.npz
 *.pyc
+*.log
+logs/*.log
