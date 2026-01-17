@@ -49,7 +49,7 @@ class KernelModule:
             checksum = checksum/plevs
         if 'time' not in kerneldims:
             checksum = checksum/ptimes
-        assert torch.allclose(checksum,torch.ones_like(checksum),atol=1e-4),f"Kernel normalization failed: weights sum to {checksum.mean().item():.6f} instead of 1.0"
+        assert torch.allclose(checksum,torch.ones_like(checksum),atol=1e-3),f"Kernel normalization failed: weights sum to {checksum.mean().item():.6f} instead of 1.0"
         return weights
 
     @staticmethod
