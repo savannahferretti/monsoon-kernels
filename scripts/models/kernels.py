@@ -207,9 +207,10 @@ class ParametricKernelLayer(torch.nn.Module):
             - nkernels (int): number of kernels to learn per predictor field
             - dim (str): dimension name ('lat', 'lon', 'lev', 'time', or 'horizontal')
             Notes:
-            - Implements k^(TH)(s; a, b) = I(s ∈ [min(a,b), max(a,b)])
+            - Implements smooth approximation: k^(TH)(s; a, b) ≈ σ((s-a)/τ) * σ((b-s)/τ)
+            - Uses sigmoid transitions instead of hard boundaries for differentiability
             - Parameters a and b are learned bounds in normalized coordinate space [-1, 1]
-            - Assigns uniform weight within bounds, zero outside
+            - Approximates uniform weight within bounds, near-zero outside
             - Handles boundaries naturally (e.g., for vertical: a or b can be at -1 or +1)
             '''
             super().__init__()
@@ -229,12 +230,17 @@ class ParametricKernelLayer(torch.nn.Module):
             - Uses normalized coordinates s ∈ [-1, 1]
             - For vertical: -1 ≈ top of atmosphere, +1 ≈ surface
             - Bounds can extend to domain edges for boundary selection
+            - Uses smooth sigmoid approximation for differentiability
             '''
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
             s1 = torch.min(self.lower,self.upper)
             s2 = torch.max(self.lower,self.upper)
-            kernel1d = ((coord[None,None,:]>=s1[...,None]) & (coord[None,None,:]<=s2[...,None])).float()
-            kernel1d = kernel1d+1e-8
+            # Use smooth sigmoids instead of hard thresholds for gradient flow
+            # temperature controls sharpness (smaller = sharper but still differentiable)
+            temperature = 0.1
+            left_edge = torch.sigmoid((coord[None,None,:] - s1[...,None]) / temperature)
+            right_edge = torch.sigmoid((s2[...,None] - coord[None,None,:]) / temperature)
+            kernel1d = left_edge * right_edge + 1e-8
             return kernel1d
 
     class ExponentialKernel(torch.nn.Module):
