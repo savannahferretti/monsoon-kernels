@@ -214,7 +214,7 @@ if __name__=='__main__':
             arr,meta = out.to_array(info['predictions'],'predictions',
                 centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
             ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-            out.save(modelname,ds,'predictions',split,PREDSDIR,seed=seed)
+            out.save(name,ds,'predictions',split,PREDSDIR,seed=seed)
             del arr,meta,ds
             if info['havekernel']:
                 logger.info('   Formatting/saving normalized kernel weights...')
@@ -224,7 +224,7 @@ if __name__=='__main__':
                     kerneldims=info['kerneldims'],
                     nonparam=info['nonparam'])
                 ds = out.to_dataset(arr,meta,refds=refds,component_weights=info['component_weights'])
-                out.save(modelname,ds,'weights',split,WEIGHTSDIR,seed=seed)
+                out.save(name,ds,'weights',split,WEIGHTSDIR,seed=seed)
                 del arr,meta,ds
                 if info['features'] is not None:
                     logger.info('   Formatting/saving kernel-integrated features...')
@@ -234,6 +234,6 @@ if __name__=='__main__':
                         kerneldims=info['kerneldims'],patchshape=patchshape,
                         nonparam=info['nonparam'])
                     ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-                    out.save(modelname,ds,'features',split,FEATSDIR,seed=seed)
+                    out.save(name,ds,'features',split,FEATSDIR,seed=seed)
                     del arr,meta,ds
             del model
