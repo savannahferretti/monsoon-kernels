@@ -195,10 +195,23 @@ class PredictionWriter:
 
             # If component weights provided, create k1, k2, etc. variables
             if component_weights is not None:
+                # Need to process component_weights with the same indexing as main weights
+                alldims = ['field','member','lat','lon','lev','time']
+                nonparam = meta.get('nonparam', False)
+                kerneldims = tuple(d for d in ('lat','lon','lev','time') if d in meta['dims1'])
+
+                if nonparam:
+                    keep = ('field','member')
+                else:
+                    keep = ('field',)
+                indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
+                nfields_original = len(self.fieldvars)
+
                 for i in range(component_weights.shape[0]):
                     comp_arr = component_weights[i]
+                    # Apply same indexing as main weights
+                    comp_arr = comp_arr[tuple(indexer)]
                     # Extract only the first len(fieldvars) channels (same as for arr)
-                    nfields_original = len(self.fieldvars)
                     if comp_arr.shape[0] > nfields_original:
                         comp_arr = comp_arr[:nfields_original]
                     da = xr.DataArray(comp_arr, dims=dims, coords=coords, name=f'k{i+1}')
