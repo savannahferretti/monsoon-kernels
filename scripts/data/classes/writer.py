@@ -98,21 +98,16 @@ class PredictionWriter:
             if kerneldims is None:
                 raise ValueError('`kerneldims` required for weight formatting')
             kerneldims = tuple(kerneldims)
-            alldims    = ['field','member','lat','lon','lev','time']
+            alldims    = ['field','lat','lon','lev','time']
 
             # Only save weights for predictor fields (exclude validity_mask channel)
             # data has shape (nfieldvars, ...) where nfieldvars = len(fieldvars) + 1
             # We only want to save the first len(fieldvars) channels
             nfields_original = len(fieldvars)
 
-            if nonparam:
-                keep    = ('field','member')
-                dims0   = ['field','member']
-                coords0 = {'field':fieldvars,'member':np.arange(data.shape[1])}
-            else:
-                keep    = ('field',)
-                dims0   = ['field']
-                coords0 = {'field':fieldvars}
+            keep    = ('field',)
+            dims0   = ['field']
+            coords0 = {'field':fieldvars}
             dims1   = [dim for dim in ('lat','lon','lev','time') if dim in kerneldims]
             indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
 
@@ -196,14 +191,10 @@ class PredictionWriter:
             # If component weights provided, create k1, k2, etc. variables
             if component_weights is not None:
                 # Need to process component_weights with the same indexing as main weights
-                alldims = ['field','member','lat','lon','lev','time']
-                nonparam = meta.get('nonparam', False)
+                alldims = ['field','lat','lon','lev','time']
                 kerneldims = tuple(d for d in ('lat','lon','lev','time') if d in meta['dims1'])
 
-                if nonparam:
-                    keep = ('field','member')
-                else:
-                    keep = ('field',)
+                keep = ('field',)
                 indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
                 nfields_original = len(self.fieldvars)
 

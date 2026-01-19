@@ -10,7 +10,7 @@ class KernelModule:
         '''
         Purpose: Normalize kernel so that sum(k * quadrature_weights) = 1 over kerneled dimensions.
         Args:
-        - kernel (torch.Tensor): unnormalized kernel with shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
+        - kernel (torch.Tensor): unnormalized kernel with shape (nfieldvars, plats, plons, plevs, ptimes)
         - dareapatch (torch.Tensor): horizontal area weights with shape (plats, plons)
         - dlevpatch (torch.Tensor): vertical thickness weights with shape (plevs,)
         - dtimepatch (torch.Tensor): time step weights with shape (ptimes,)
@@ -23,14 +23,14 @@ class KernelModule:
         plats,plons = dareapatch.shape
         plevs = dlevpatch.numel()
         ptimes = dtimepatch.numel()
-        quad = torch.ones(1,1,plats,plons,plevs,ptimes,dtype=kernel.dtype,device=kernel.device)
+        quad = torch.ones(1,plats,plons,plevs,ptimes,dtype=kernel.dtype,device=kernel.device)
         if ('lat' in kerneldims) or ('lon' in kerneldims):
-            quad = quad*dareapatch[None,None,:,:,None,None]
+            quad = quad*dareapatch[None,:,:,None,None]
         if 'lev' in kerneldims:
-            quad = quad*dlevpatch[None,None,None,None,:,None]
+            quad = quad*dlevpatch[None,None,None,:,None]
         if 'time' in kerneldims:
-            quad = quad*dtimepatch[None,None,None,None,None,:]
-        kernelsum = (kernel*quad).sum(dim=(2,3,4,5))
+            quad = quad*dtimepatch[None,None,None,None,:]
+        kernelsum = (kernel*quad).sum(dim=(1,2,3,4))
         if 'lat' not in kerneldims:
             kernelsum = kernelsum/plats
         if 'lon' not in kerneldims:
@@ -39,8 +39,8 @@ class KernelModule:
             kernelsum = kernelsum/plevs
         if 'time' not in kerneldims:
             kernelsum = kernelsum/ptimes
-        weights = kernel/(kernelsum[:,:,None,None,None,None]+epsilon)
-        checksum = (weights*quad).sum(dim=(2,3,4,5))
+        weights = kernel/(kernelsum[:,None,None,None,None]+epsilon)
+        checksum = (weights*quad).sum(dim=(1,2,3,4))
         if 'lat' not in kerneldims:
             checksum = checksum/plats
         if 'lon' not in kerneldims:
@@ -58,32 +58,32 @@ class KernelModule:
         Purpose: Integrate predictor fields using normalized kernel weights with quadrature over kerneled dimensions.
         Args:
         - fieldpatch (torch.Tensor): predictor fields patch with shape (nbatch, nfieldvars, plats, plons, plevs, ptimes)
-        - weights (torch.Tensor): normalized kernel weights with shape (nfieldvars, nkernels, plats or 1, plons or 1, plevs or 1, ptimes or 1)
+        - weights (torch.Tensor): normalized kernel weights with shape (nfieldvars, plats or 1, plons or 1, plevs or 1, ptimes or 1)
         - dareapatch (torch.Tensor): horizontal area weights with shape (nbatch, plats, plons)
         - dlevpatch (torch.Tensor): vertical thickness weights with shape (nbatch, plevs)
         - dtimepatch (torch.Tensor): time step weights with shape (nbatch, ptimes)
         - kerneldims (tuple[str] | list[str]): dimensions the kernel varies along
         Returns:
-        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars, nkernels, ...) where ... are preserved non-kerneled dimensions
+        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars, ...) where ... are preserved non-kerneled dimensions
         '''
-        weighted = fieldpatch.unsqueeze(2)*weights.unsqueeze(0)
+        weighted = fieldpatch*weights.unsqueeze(0)
         quad = 1.0
         if ('lat' in kerneldims) or ('lon' in kerneldims):
-            quad = quad*dareapatch[:,None,None,:,:,None,None]
+            quad = quad*dareapatch[:,None,:,:,None,None]
         if 'lev' in kerneldims:
-            quad = quad*dlevpatch[:,None,None,None,None,:,None]
+            quad = quad*dlevpatch[:,None,None,None,:,None]
         if 'time' in kerneldims:
-            quad = quad*dtimepatch[:,None,None,None,None,None,:]
+            quad = quad*dtimepatch[:,None,None,None,None,:]
         weighted = weighted*quad
         dimstosum = []
         if 'lat' in kerneldims:
-            dimstosum.append(3)
+            dimstosum.append(2)
         if 'lon' in kerneldims:
-            dimstosum.append(4)
+            dimstosum.append(3)
         if 'lev' in kerneldims:
-            dimstosum.append(5)
+            dimstosum.append(4)
         if 'time' in kerneldims:
-            dimstosum.append(6)
+            dimstosum.append(5)
         return torch.nansum(weighted,dim=dimstosum) if dimstosum else weighted
 
 
@@ -99,7 +99,6 @@ class NonparametricKernelLayer(torch.nn.Module):
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
-        self.nkernels   = 1  # Always use single kernel per field
         self.kerneldims = tuple(kerneldims)
         self.weights    = None
         self.features   = None
@@ -110,7 +109,7 @@ class NonparametricKernelLayer(torch.nn.Module):
             plons  if 'lon' in self.kerneldims else 1,
             plevs  if 'lev' in self.kerneldims else 1,
             ptimes if 'time' in self.kerneldims else 1]
-        kernel = torch.ones(self.nfieldvars,self.nkernels,*kernelshape)
+        kernel = torch.ones(self.nfieldvars,*kernelshape)
         kernel = kernel+torch.randn_like(kernel)*0.2
         self.kernel = torch.nn.Parameter(kernel)
 
@@ -123,7 +122,7 @@ class NonparametricKernelLayer(torch.nn.Module):
         - dtimepatch (torch.Tensor): time step weights patch with shape (ptimes,) or (nbatch, ptimes)
         - device (str | torch.device): device to use
         Returns:
-        - torch.Tensor: normalized kernel weights of shape (nfieldvars, nkernels, plats_or_1, plons_or_1, plevs_or_1, ptimes_or_1)
+        - torch.Tensor: normalized kernel weights of shape (nfieldvars, plats_or_1, plons_or_1, plevs_or_1, ptimes_or_1)
         '''
         self.kernel = self.kernel.to(device)
         dareapatch  = dareapatch.to(device)
@@ -152,7 +151,7 @@ class NonparametricKernelLayer(torch.nn.Module):
         - dtimepatch (torch.Tensor): time step weights patch with shape (nbatch, ptimes)
         - dlevfull (torch.Tensor): full vertical thickness weights from fixed grid with shape (nlevs,)
         Returns:
-        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels*preserved_dims)
+        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*preserved_dims)
         '''
         weights = self.get_weights(dareapatch,dlevfull,dtimepatch,fieldpatch.device)
         feats = KernelModule.integrate(fieldpatch,weights,dareapatch,dlevpatch,dtimepatch,self.kerneldims)
@@ -163,12 +162,11 @@ class ParametricKernelLayer(torch.nn.Module):
 
     class GaussianKernel(torch.nn.Module):
 
-        def __init__(self,nfieldvars,nkernels,dim):
+        def __init__(self,nfieldvars,dim):
             '''
             Purpose: Initialize Gaussian kernel parameters along one dimension.
             Args:
             - nfieldvars (int): number of predictor fields
-            - nkernels (int): number of kernels to learn per predictor field
             - dim (str): dimension name ('lat', 'lon', 'lev', 'time', or 'horizontal')
             Notes:
             - Implements k^(G)(s; μ, σ) = exp(-||s-μ||²/(2σ²))
@@ -176,8 +174,8 @@ class ParametricKernelLayer(torch.nn.Module):
             '''
             super().__init__()
             self.dim = dim
-            self.mean = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
-            self.logstd = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
+            self.mean = torch.nn.Parameter(torch.zeros(int(nfieldvars)))
+            self.logstd = torch.nn.Parameter(torch.zeros(int(nfieldvars)))
 
         def forward(self,length,device):
             '''
@@ -186,24 +184,23 @@ class ParametricKernelLayer(torch.nn.Module):
             - length (int): number of points along the axis
             - device (str | torch.device): device to use
             Returns:
-            - torch.Tensor: Gaussian kernel values with shape (nfieldvars, nkernels, length)
+            - torch.Tensor: Gaussian kernel values with shape (nfieldvars, length)
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
             - For vertical: -1 ≈ top of atmosphere, +1 ≈ surface
             '''
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
             std = torch.exp(self.logstd)
-            kernel1d = torch.exp(-0.5*((coord[None,None,:]-self.mean[...,None])/std[...,None])**2)
+            kernel1d = torch.exp(-0.5*((coord[None,:]-self.mean[:,None])/std[:,None])**2)
             return kernel1d
 
     class TopHatKernel(torch.nn.Module):
 
-        def __init__(self,nfieldvars,nkernels,dim):
+        def __init__(self,nfieldvars,dim):
             '''
             Purpose: Initialize top-hat (uniform) kernel parameters along one dimension.
             Args:
             - nfieldvars (int): number of predictor fields
-            - nkernels (int): number of kernels to learn per predictor field
             - dim (str): dimension name ('lat', 'lon', 'lev', 'time', or 'horizontal')
             Notes:
             - Implements smooth approximation: k^(TH)(s; a, b) ≈ σ((s-a)/τ) * σ((b-s)/τ)
@@ -214,8 +211,8 @@ class ParametricKernelLayer(torch.nn.Module):
             '''
             super().__init__()
             self.dim = dim
-            self.lower = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)),-0.5))
-            self.upper = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)),0.5))
+            self.lower = torch.nn.Parameter(torch.full((int(nfieldvars),),-0.5))
+            self.upper = torch.nn.Parameter(torch.full((int(nfieldvars),),0.5))
 
         def forward(self,length,device):
             '''
@@ -224,7 +221,7 @@ class ParametricKernelLayer(torch.nn.Module):
             - length (int): number of points along the axis
             - device (str | torch.device): device to use
             Returns:
-            - torch.Tensor: top-hat kernel values with shape (nfieldvars, nkernels, length)
+            - torch.Tensor: top-hat kernel values with shape (nfieldvars, length)
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
             - For vertical: -1 ≈ top of atmosphere, +1 ≈ surface
@@ -237,19 +234,18 @@ class ParametricKernelLayer(torch.nn.Module):
             # Use smooth sigmoids instead of hard thresholds for gradient flow
             # temperature controls sharpness (smaller = sharper but still differentiable)
             temperature = 0.1
-            left_edge = torch.sigmoid((coord[None,None,:] - s1[...,None]) / temperature)
-            right_edge = torch.sigmoid((s2[...,None] - coord[None,None,:]) / temperature)
+            left_edge = torch.sigmoid((coord[None,:] - s1[:,None]) / temperature)
+            right_edge = torch.sigmoid((s2[:,None] - coord[None,:]) / temperature)
             kernel1d = left_edge * right_edge + 1e-8
             return kernel1d
 
     class ExponentialKernel(torch.nn.Module):
 
-        def __init__(self,nfieldvars,nkernels,dim):
+        def __init__(self,nfieldvars,dim):
             '''
             Purpose: Initialize exponential-decay kernel parameters with dimension-specific behavior.
             Args:
             - nfieldvars (int): number of predictor fields
-            - nkernels (int): number of kernels to learn per predictor field
             - dim (str): dimension name ('lat', 'lon', 'lev', 'time', or 'horizontal')
             Notes:
             - Implements k^(EXP)(s; τ₀) = exp(-ℓ(s)/τ₀) where ℓ(s) is distance from anchor
@@ -260,9 +256,9 @@ class ParametricKernelLayer(torch.nn.Module):
             '''
             super().__init__()
             self.dim = dim
-            self.logtau = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
+            self.logtau = torch.nn.Parameter(torch.zeros(int(nfieldvars)))
             if dim=='lev':
-                self.logitalpha = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
+                self.logitalpha = torch.nn.Parameter(torch.zeros(int(nfieldvars)))
 
         def forward(self,length,device):
             '''
@@ -271,7 +267,7 @@ class ParametricKernelLayer(torch.nn.Module):
             - length (int): number of points along the axis
             - device (str | torch.device): device to use
             Returns:
-            - torch.Tensor: exponential kernel values with shape (nfieldvars, nkernels, length)
+            - torch.Tensor: exponential kernel values with shape (nfieldvars, length)
             Notes:
             - Time: distance ℓ(j) = (N-1)-j (decay from present into past)
             - Vertical: distance ℓ(j) = (1-α)·j + α·(N-1-j) where α∈(0,1) learned
@@ -280,16 +276,16 @@ class ParametricKernelLayer(torch.nn.Module):
             tau = torch.exp(self.logtau).clamp(min=1e-4,max=100.0)
             if self.dim=='time':
                 distance = torch.arange(length-1,-1,-1,device=device,dtype=torch.float32)
-                kernel1d = torch.exp(-distance[None,None,:]/tau[...,None])
+                kernel1d = torch.exp(-distance[None,:]/tau[:,None])
             elif self.dim=='lev':
                 alpha = torch.sigmoid(self.logitalpha)
                 j = torch.arange(length,device=device,dtype=torch.float32)
-                distance = (1.0-alpha[...,None])*j[None,None,:]+(alpha[...,None])*(length-1-j[None,None,:])
-                kernel1d = torch.exp(-distance/tau[...,None])
+                distance = (1.0-alpha[:,None])*j[None,:]+(alpha[:,None])*(length-1-j[None,:])
+                kernel1d = torch.exp(-distance/tau[:,None])
             else:
                 coord = torch.linspace(-1.0,1.0,steps=length,device=device)
                 distance = coord.abs()
-                kernel1d = torch.exp(-distance[None,None,:]/tau[...,None])
+                kernel1d = torch.exp(-distance[None,:]/tau[:,None])
             return kernel1d
 
         def forward_horizontal(self,shape,device):
@@ -299,7 +295,7 @@ class ParametricKernelLayer(torch.nn.Module):
             - shape (tuple[int,int]): (plats, plons)
             - device (str | torch.device): device to use
             Returns:
-            - torch.Tensor: 2D exponential kernel with shape (nfieldvars, nkernels, plats, plons)
+            - torch.Tensor: 2D exponential kernel with shape (nfieldvars, plats, plons)
             Notes:
             - Computes radial distance from center: ℓ(x) = ||x - x₀||
             - Creates circus tent decay pattern
@@ -310,17 +306,16 @@ class ParametricKernelLayer(torch.nn.Module):
             lons = torch.linspace(-1.0,1.0,steps=plons,device=device)
             latgrid,longrid = torch.meshgrid(lats,lons,indexing='ij')
             distance = torch.sqrt(latgrid**2+longrid**2)
-            kernel2d = torch.exp(-distance[None,None,:,:]/tau[...,None,None])
+            kernel2d = torch.exp(-distance[None,:,:]/tau[:,None,None])
             return kernel2d
 
     class MixtureGaussianKernel(torch.nn.Module):
 
-        def __init__(self,nfieldvars,nkernels,dim):
+        def __init__(self,nfieldvars,dim):
             '''
             Purpose: Initialize mixture-of-Gaussians kernel parameters along one dimension.
             Args:
             - nfieldvars (int): number of predictor fields
-            - nkernels (int): number of kernels to learn per predictor field
             - dim (str): dimension name ('lat', 'lon', 'lev', 'time', or 'horizontal')
             Notes:
             - Implements k^(MG)(s; μ₁, σ₁, μ₂, σ₂, w₁, w₂) = w₁·N(μ₁,σ₁²) + w₂·N(μ₂,σ₂²)
@@ -332,12 +327,12 @@ class ParametricKernelLayer(torch.nn.Module):
             '''
             super().__init__()
             self.dim = dim
-            self.center1 = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)),-0.5))
-            self.center2 = torch.nn.Parameter(torch.full((int(nfieldvars),int(nkernels)),0.5))
-            self.logwidth1 = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
-            self.logwidth2 = torch.nn.Parameter(torch.zeros(int(nfieldvars),int(nkernels)))
-            self.weight1 = torch.nn.Parameter(torch.ones(int(nfieldvars),int(nkernels)))
-            self.weight2 = torch.nn.Parameter(torch.ones(int(nfieldvars),int(nkernels)))
+            self.center1 = torch.nn.Parameter(torch.full((int(nfieldvars),),-0.5))
+            self.center2 = torch.nn.Parameter(torch.full((int(nfieldvars),),0.5))
+            self.logwidth1 = torch.nn.Parameter(torch.zeros(int(nfieldvars)))
+            self.logwidth2 = torch.nn.Parameter(torch.zeros(int(nfieldvars)))
+            self.weight1 = torch.nn.Parameter(torch.ones(int(nfieldvars)))
+            self.weight2 = torch.nn.Parameter(torch.ones(int(nfieldvars)))
 
         def get_components(self,length,device):
             '''
@@ -346,7 +341,7 @@ class ParametricKernelLayer(torch.nn.Module):
             - length (int): number of points along the axis
             - device (str | torch.device): device to use
             Returns:
-            - tuple: (component1, component2) each with shape (nfieldvars, nkernels, length)
+            - tuple: (component1, component2) each with shape (nfieldvars, length)
             Notes:
             - Returns weighted Gaussian components before they are combined
             - Useful for visualizing each component separately in plots
@@ -356,14 +351,14 @@ class ParametricKernelLayer(torch.nn.Module):
             width2 = torch.exp(self.logwidth2).clamp(min=0.1, max=2.0)
 
             # Compute two Gaussian components
-            dist1 = coord[None,None,:] - self.center1[...,None]
-            dist2 = coord[None,None,:] - self.center2[...,None]
-            gauss1 = torch.exp(-dist1**2 / (2 * width1[...,None]**2))
-            gauss2 = torch.exp(-dist2**2 / (2 * width2[...,None]**2))
+            dist1 = coord[None,:] - self.center1[:,None]
+            dist2 = coord[None,:] - self.center2[:,None]
+            gauss1 = torch.exp(-dist1**2 / (2 * width1[:,None]**2))
+            gauss2 = torch.exp(-dist2**2 / (2 * width2[:,None]**2))
 
             # Return weighted components separately
-            component1 = self.weight1[...,None] * gauss1
-            component2 = self.weight2[...,None] * gauss2
+            component1 = self.weight1[:,None] * gauss1
+            component2 = self.weight2[:,None] * gauss2
 
             return component1, component2
 
@@ -374,7 +369,7 @@ class ParametricKernelLayer(torch.nn.Module):
             - length (int): number of points along the axis
             - device (str | torch.device): device to use
             Returns:
-            - torch.Tensor: mixture kernel values with shape (nfieldvars, nkernels, length)
+            - torch.Tensor: mixture kernel values with shape (nfieldvars, length)
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
             - Combines two Gaussian bumps with independent learnable weights
@@ -403,7 +398,6 @@ class ParametricKernelLayer(torch.nn.Module):
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
-        self.nkernels = 1  # Always use single kernel per field
         self.kerneldict = dict(kerneldict)
         self.kerneldims = tuple(kerneldict.keys())
         self.weights = None
@@ -423,38 +417,37 @@ class ParametricKernelLayer(torch.nn.Module):
                     if isinstance(function_spec,list):
                         raise ValueError('Per-field kernels not supported for horizontal exponential (lat+lon must use same exponential)')
                     self.perfield['horizontal'] = False
-                    self.functions['horizontal'] = self._create_kernel('exponential',self.nfieldvars,self.nkernels,'horizontal')
+                    self.functions['horizontal'] = self._create_kernel('exponential',self.nfieldvars,'horizontal')
                 continue
             if isinstance(function_spec,list):
                 if len(function_spec)!=self.nfieldvars:
                     raise ValueError(f'Per-field kernel list for dim `{dim}` must have length {self.nfieldvars}, got {len(function_spec)}')
                 self.perfield[dim] = True
                 self.functions[dim] = torch.nn.ModuleList([
-                    self._create_kernel(func,1,self.nkernels,dim) for func in function_spec
+                    self._create_kernel(func,1,dim) for func in function_spec
                 ])
             else:
                 self.perfield[dim] = False
-                self.functions[dim] = self._create_kernel(function_spec,self.nfieldvars,self.nkernels,dim)
+                self.functions[dim] = self._create_kernel(function_spec,self.nfieldvars,dim)
 
-    def _create_kernel(self,function,nfieldvars,nkernels,dim):
+    def _create_kernel(self,function,nfieldvars,dim):
         '''
         Purpose: Factory method to create a kernel instance from a function name.
         Args:
         - function (str): kernel type name
         - nfieldvars (int): number of field variables for this kernel
-        - nkernels (int): number of kernels per field
         - dim (str): dimension name ('lat', 'lon', 'lev', 'time', or 'horizontal')
         Returns:
         - torch.nn.Module: kernel instance
         '''
         if function=='gaussian':
-            return self.GaussianKernel(nfieldvars,nkernels,dim)
+            return self.GaussianKernel(nfieldvars,dim)
         elif function=='tophat':
-            return self.TopHatKernel(nfieldvars,nkernels,dim)
+            return self.TopHatKernel(nfieldvars,dim)
         elif function=='exponential':
-            return self.ExponentialKernel(nfieldvars,nkernels,dim)
+            return self.ExponentialKernel(nfieldvars,dim)
         elif function=='mixgaussian':
-            return self.MixtureGaussianKernel(nfieldvars,nkernels,dim)
+            return self.MixtureGaussianKernel(nfieldvars,dim)
         else:
             raise ValueError(f'Unknown function type `{function}`; must be `gaussian`, `tophat`, `exponential`, or `mixgaussian`')
 
@@ -468,7 +461,7 @@ class ParametricKernelLayer(torch.nn.Module):
         - device (str | torch.device): device to use
         - compute_components (bool): whether to compute component weights for mixture kernels (default: False)
         Returns:
-        - torch.Tensor: normalized kernel weights of shape (nfieldvars, nkernels, plats, plons, plevs, ptimes)
+        - torch.Tensor: normalized kernel weights of shape (nfieldvars, plats, plons, plevs, ptimes)
         '''
         dareapatch = dareapatch.to(device)
         dlevfull   = dlevfull.to(device)
@@ -486,12 +479,12 @@ class ParametricKernelLayer(torch.nn.Module):
         plats,plons = dareapatch0.shape
         plevs = self.dlevfull.numel()
         ptimes = dtimepatch0.numel()
-        kernel = torch.ones(self.nfieldvars,self.nkernels,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
+        kernel = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
         has_horizontal = 'horizontal' in self.functions
         if has_horizontal:
             kernel2d = self.functions['horizontal'].forward_horizontal((plats,plons),device)
-            kernel = kernel*kernel2d.view(self.nfieldvars,self.nkernels,plats,plons,1,1)
-        for ax,dim in enumerate(('lat','lon','lev','time'),start=2):
+            kernel = kernel*kernel2d.view(self.nfieldvars,plats,plons,1,1)
+        for ax,dim in enumerate(('lat','lon','lev','time'),start=1):
             if has_horizontal and dim in ('lat','lon'):
                 continue
             if dim in self.kerneldims:
@@ -503,7 +496,7 @@ class ParametricKernelLayer(torch.nn.Module):
                     kernel1d = torch.cat(kernel1d_list,dim=0)
                 else:
                     kernel1d = self.functions[dim](kernel.shape[ax],device)
-                view = [kernel.shape[0],kernel.shape[1],1,1,1,1]
+                view = [kernel.shape[0],1,1,1,1]
                 view[ax] = kernel.shape[ax]
                 kernel = kernel*kernel1d.view(*view)
         normkerneldims = list(self.kerneldims)
@@ -532,13 +525,13 @@ class ParametricKernelLayer(torch.nn.Module):
                 break
 
         if has_mixture:
-            kernel_c1 = torch.ones(self.nfieldvars,self.nkernels,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
-            kernel_c2 = torch.ones(self.nfieldvars,self.nkernels,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
+            kernel_c1 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
+            kernel_c2 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
             if has_horizontal:
                 kernel2d = self.functions['horizontal'].forward_horizontal((plats,plons),device)
-                kernel_c1 = kernel_c1*kernel2d.view(self.nfieldvars,self.nkernels,plats,plons,1,1)
-                kernel_c2 = kernel_c2*kernel2d.view(self.nfieldvars,self.nkernels,plats,plons,1,1)
-            for ax,dim in enumerate(('lat','lon','lev','time'),start=2):
+                kernel_c1 = kernel_c1*kernel2d.view(self.nfieldvars,plats,plons,1,1)
+                kernel_c2 = kernel_c2*kernel2d.view(self.nfieldvars,plats,plons,1,1)
+            for ax,dim in enumerate(('lat','lon','lev','time'),start=1):
                 if has_horizontal and dim in ('lat','lon'):
                     continue
                 if dim in self.kerneldims:
@@ -563,7 +556,7 @@ class ParametricKernelLayer(torch.nn.Module):
                             kernel1d = self.functions[dim](kernel_c1.shape[ax],device)
                             kernel1d_c1 = kernel1d
                             kernel1d_c2 = kernel1d
-                    view = [kernel_c1.shape[0],kernel_c1.shape[1],1,1,1,1]
+                    view = [kernel_c1.shape[0],1,1,1,1]
                     view[ax] = kernel_c1.shape[ax]
                     kernel_c1 = kernel_c1*kernel1d_c1.view(*view)
                     kernel_c2 = kernel_c2*kernel1d_c2.view(*view)
@@ -583,7 +576,7 @@ class ParametricKernelLayer(torch.nn.Module):
         - dtimepatch (torch.Tensor): time step weights patch with shape (nbatch, ptimes)
         - dlevfull (torch.Tensor): full vertical thickness weights from fixed grid with shape (nlevs,)
         Returns:
-        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*nkernels*preserved_dims)
+        - torch.Tensor: kernel-integrated features with shape (nbatch, nfieldvars*preserved_dims)
         '''
         weights = self.get_weights(dareapatch,dlevfull,dtimepatch,fieldpatch.device)
         feats = KernelModule.integrate(fieldpatch,weights,dareapatch,dlevpatch,dtimepatch,self.kerneldims)
