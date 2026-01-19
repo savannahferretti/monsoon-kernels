@@ -31,7 +31,7 @@
   },
   "training":{
     "projectname":"Data-Driven Integration Kernel Experiments",
-    "seeds":[72],
+    "seeds":[102],
     "workers":8,
     "epochs":20,
     "batchsize":500,
@@ -70,7 +70,6 @@
          "description":"($\\mathbf{x}_0$, $\\mathit{p}^\\mathit{k}$, $\\mathit{t}_0$)",
          "patch":{"radius":0,"levmode":"column","timelag":0},
          "uselocal":true,
-         "nkernels":4,
          "kerneldims":["lev"]},
     {"name":"kernel_gaussian_vertical",
          "kind":"parametric",
@@ -92,7 +91,7 @@
          "kerneldict":{"lev":"tophat"}},
     {"name":"kernel_mixgaussian_vertical",
          "kind":"parametric",
-         "description":"($\\mathbf{x}_0$, $\\mathit{p}^\\mathrm{MG}$, $\\mathit{t}_0$)",
+         "description":"($\\mathbf{x}_0$, $\\mathit{p}^\\mathrm{MIXG}$, $\\mathit{t}_0$)",
          "patch":{"radius":0,"levmode":"column","timelag":0},
          "uselocal":true,
          "kerneldict":{"lev":"mixgaussian"}}
