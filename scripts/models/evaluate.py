@@ -226,14 +226,15 @@ if __name__=='__main__':
                 ds = out.to_dataset(arr,meta,refds=refds,component_weights=info['component_weights'])
                 out.save(name,ds,'weights',split,WEIGHTSDIR,seed=seed)
                 del arr,meta,ds
-                if info['features'] is not None:
-                    logger.info('   Formatting/saving kernel-integrated features...')
-                    arr,meta = out.to_array(
-                        info['features'],'features',
-                        centers=centers,refda=refda,nkernels=info['nkernels'],
-                        kerneldims=info['kerneldims'],patchshape=patchshape,
-                        nonparam=info['nonparam'])
-                    ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-                    out.save(name,ds,'features',split,FEATSDIR,seed=seed)
-                    del arr,meta,ds
+                # Skipping kernel-integrated features - not needed
+                # if info['features'] is not None:
+                #     logger.info('   Formatting/saving kernel-integrated features...')
+                #     arr,meta = out.to_array(
+                #         info['features'],'features',
+                #         centers=centers,refda=refda,nkernels=info['nkernels'],
+                #         kerneldims=info['kerneldims'],patchshape=patchshape,
+                #         nonparam=info['nonparam'])
+                #     ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
+                #     out.save(name,ds,'features',split,FEATSDIR,seed=seed)
+                #     del arr,meta,ds
             del model
