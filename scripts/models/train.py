@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os
 import logging
 import argparse
 import numpy as np
@@ -80,6 +81,11 @@ if __name__=='__main__':
         seeds = modelconfig.get('seeds',config.seeds)
         for seed in seeds:
             modelname = f'{name}_seed{seed}' if len(seeds)>1 else name
+            # Check if checkpoint already exists
+            checkpoint_path = os.path.join(config.modelsdir,kind,f'{name}_seed{seed}.pth')
+            if os.path.exists(checkpoint_path):
+                logger.info(f'Skipping `{modelname}`: checkpoint already exists at {checkpoint_path}')
+                continue
             logger.info(f'Training `{modelname}`...')
             device = setup(seed)
             patchconfig = modelconfig['patch']
