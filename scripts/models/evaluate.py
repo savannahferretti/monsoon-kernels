@@ -81,7 +81,7 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     '''
     kind     = modelconfig['kind']
     filedir  = os.path.join(modeldir,kind)
-    filename = f'{name}.pth'
+    filename = f'{name}_seed{seed}.pth'
     filepath = os.path.join(filedir,filename)
     if not os.path.exists(filepath):
         logger.error(f'   Checkpoint not found: {filepath}')
