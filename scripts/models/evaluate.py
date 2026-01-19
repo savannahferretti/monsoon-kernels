@@ -145,7 +145,7 @@ def inference(model,split,result,uselocal,device):
                     weights = model.intkernel.weights.detach().cpu().numpy()
                     # Compute component weights for mixture kernels (only for parametric kernels)
                     component_weights = None
-                    if hasattr(model.intkernel, 'get_weights'):
+                    if not nonparam and hasattr(model.intkernel, 'get_weights'):
                         # Parametric kernel: explicitly compute components
                         _ = model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,device,compute_components=True)
                         if model.intkernel.component_weights is not None:
