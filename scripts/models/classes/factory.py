@@ -23,14 +23,12 @@ class ModelFactory:
         if kind=='baseline':
             model = BaselineNN(patchshape,nfieldvars,nlocalvars,uselocal)
         elif kind=='nonparametric':
-            # Always use nkernels=1 (single kernel per field)
             kerneldims = modelconfig['kerneldims']
-            intkernel = NonparametricKernelLayer(nfieldvars,1,kerneldims,patchshape)
+            intkernel = NonparametricKernelLayer(nfieldvars,kerneldims,patchshape)
             model = KernelNN(intkernel,nlocalvars,uselocal,patchshape)
         elif kind=='parametric':
-            # Always use nkernels=1 (single kernel per field)
             kerneldict = modelconfig['kerneldict']
-            intkernel = ParametricKernelLayer(nfieldvars,1,kerneldict)
+            intkernel = ParametricKernelLayer(nfieldvars,kerneldict)
             model = KernelNN(intkernel,nlocalvars,uselocal,patchshape)
         else:
             raise ValueError(f'Unknown model kind `{kind}`')

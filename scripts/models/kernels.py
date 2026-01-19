@@ -89,18 +89,17 @@ class KernelModule:
 
 class NonparametricKernelLayer(torch.nn.Module):
 
-    def __init__(self,nfieldvars,nkernels,kerneldims,patchshape):
+    def __init__(self,nfieldvars,kerneldims,patchshape):
         '''
         Purpose: Initialize free-form (non-parametric) kernels along selected dimensions.
         Args:
         - nfieldvars (int): number of predictor fields
-        - nkernels (int): number of kernels to learn per predictor field
         - kerneldims (list[str] | tuple[str]): dimensions the kernel varies along
         - patchshape (tuple[int,int,int,int]): patch shape as (plats, plons, plevs, ptimes)
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
-        self.nkernels   = int(nkernels)
+        self.nkernels   = 1  # Always use single kernel per field
         self.kerneldims = tuple(kerneldims)
         self.weights    = None
         self.features   = None
@@ -391,12 +390,11 @@ class ParametricKernelLayer(torch.nn.Module):
             kernel1d = kernel1d + 1e-8
             return kernel1d
 
-    def __init__(self,nfieldvars,nkernels,kerneldict):
+    def __init__(self,nfieldvars,kerneldict):
         '''
         Purpose: Initialize parametric kernels along selected dimensions.
         Args:
         - nfieldvars (int): number of predictor fields
-        - nkernels (int): number of kernels to learn per predictor field
         - kerneldict (dict[str,str|list[str]]): mapping of dimensions to kernel type(s)
           Supports two formats:
           1. Single kernel for all fields: {"lev": "gaussian"}
@@ -405,7 +403,7 @@ class ParametricKernelLayer(torch.nn.Module):
         '''
         super().__init__()
         self.nfieldvars = int(nfieldvars)
-        self.nkernels = int(nkernels)
+        self.nkernels = 1  # Always use single kernel per field
         self.kerneldict = dict(kerneldict)
         self.kerneldims = tuple(kerneldict.keys())
         self.weights = None
