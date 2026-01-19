@@ -254,6 +254,10 @@ class ParametricKernelLayer(torch.nn.Module):
             threshold = 0.5  # Values below this are set to exactly zero
             kernel1d = torch.where(kernel1d > threshold, kernel1d, torch.zeros_like(kernel1d))
 
+            # Add small epsilon to non-zero values for numerical stability during training
+            # This doesn't affect the "exactly zero" property outside the layer
+            kernel1d = torch.where(kernel1d > 0, kernel1d + 1e-8, kernel1d)
+
             return kernel1d
 
     class ExponentialKernel(torch.nn.Module):
