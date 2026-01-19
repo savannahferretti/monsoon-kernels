@@ -227,15 +227,27 @@ class ParametricKernelLayer(torch.nn.Module):
             - For vertical: -1 ≈ top of atmosphere, +1 ≈ surface
             - Bounds can extend to domain edges for boundary selection
             - Uses smooth sigmoid approximation for differentiability
+            - Width is constrained to prevent uniform distribution across all levels
             '''
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
             s1 = torch.min(self.lower,self.upper)
             s2 = torch.max(self.lower,self.upper)
+
+            # Constrain width to be at most 75% of full range to prevent uniform kernels
+            # This ensures the kernel must select specific layers, not all of them
+            max_width = 1.5  # 75% of full range [-1, 1]
+            width = s2 - s1
+            # Soft constraint: if width exceeds max, compress it
+            width_constrained = torch.where(width > max_width,
+                                           max_width * torch.tanh(width / max_width),
+                                           width)
+            s2_constrained = s1 + width_constrained
+
             # Use smooth sigmoids instead of hard thresholds for gradient flow
             # temperature controls sharpness (smaller = sharper but still differentiable)
-            temperature = 0.1
+            temperature = 0.05  # Sharper transitions for more layer-like behavior
             left_edge = torch.sigmoid((coord[None,:] - s1[:,None]) / temperature)
-            right_edge = torch.sigmoid((s2[:,None] - coord[None,:]) / temperature)
+            right_edge = torch.sigmoid((s2_constrained[:,None] - coord[None,:]) / temperature)
             kernel1d = left_edge * right_edge + 1e-8
             return kernel1d
 
