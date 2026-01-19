@@ -64,23 +64,24 @@ def parse():
     models = None if args.models=='all' else {name.strip() for name in args.models.split(',') if name.strip()}
     return models,args.split
     
-def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,modeldir=MODELDIR):
+def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,modeldir=MODELDIR,seed=SEED):
     '''
     Purpose: Initialize a model instance from ModelFactory.build() and populate with weights from a saved checkpoint.
     Args:
     - name (str): model name
     - modelconfig (dict): model configuration
-    - result (dict[str,object]): dictionary from PatchDataLoader.dataloaders()  
+    - result (dict[str,object]): dictionary from PatchDataLoader.dataloaders()
     - device (str): device to use
     - fieldvars (list[str]): predictor field variable names (defaults to FIELDVARS)
     - localvars (list[str]): local input variable names (defaults to LOCALVARS)
     - modeldir (str): directory containing checkpoints (defaults to MODELDIR)
+    - seed (int): random seed used during training (defaults to SEED)
     Returns:
     - torch.nn.Module: model with loaded state_dict on 'device' or None if checkpoint not found
     '''
     kind     = modelconfig['kind']
     filedir  = os.path.join(modeldir,kind)
-    filename = f'{name}.pth'
+    filename = f'{name}_seed{seed}.pth'
     filepath = os.path.join(filedir,filename)
     if not os.path.exists(filepath):
         logger.error(f'   Checkpoint not found: {filepath}')
@@ -207,7 +208,7 @@ if __name__=='__main__':
             arr,meta = out.to_array(info['predictions'],'predictions',
                 centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
             ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-            out.save(modelname,ds,'predictions',split,PREDSDIR)
+            out.save(modelname,ds,'predictions',split,PREDSDIR,seed=SEED)
             del arr,meta,ds
             if info['havekernel']:
                 logger.info('   Formatting/saving normalized kernel weights...')
@@ -217,7 +218,7 @@ if __name__=='__main__':
                     kerneldims=info['kerneldims'],
                     nonparam=info['nonparam'])
                 ds = out.to_dataset(arr,meta,refds=refds,component_weights=info['component_weights'])
-                out.save(modelname,ds,'weights',split,WEIGHTSDIR)
+                out.save(modelname,ds,'weights',split,WEIGHTSDIR,seed=SEED)
                 del arr,meta,ds
                 if info['features'] is not None:
                     logger.info('   Formatting/saving kernel-integrated features...')
@@ -227,6 +228,6 @@ if __name__=='__main__':
                         kerneldims=info['kerneldims'],patchshape=patchshape,
                         nonparam=info['nonparam'])
                     ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-                    out.save(modelname,ds,'features',split,FEATSDIR)
+                    out.save(modelname,ds,'features',split,FEATSDIR,seed=SEED)
                     del arr,meta,ds
             del model
