@@ -203,7 +203,7 @@ if __name__=='__main__':
                 result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,maxradius,maxtimelag)
                 cachedconfig = currentconfig
                 cachedresult = result
-            model = load(modelname,modelconfig,result,device,seed=seed)
+            model = load(name,modelconfig,result,device,seed=seed)
             if model is None:
                 continue
             info = inference(model,split,result,uselocal,device)
