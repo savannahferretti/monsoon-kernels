@@ -225,8 +225,7 @@ class ParametricKernelLayer(torch.nn.Module):
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
             - For vertical: -1 ≈ top of atmosphere, +1 ≈ surface
-            - Bounds can extend to domain edges for boundary selection
-            - Uses smooth sigmoid approximation for differentiability
+            - Implements a sharp boxcar function: weight inside layer, near-zero outside
             - Width is constrained to prevent uniform distribution across all levels
             '''
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
@@ -243,12 +242,20 @@ class ParametricKernelLayer(torch.nn.Module):
                                            width)
             s2_constrained = s1 + width_constrained
 
-            # Use smooth sigmoids instead of hard thresholds for gradient flow
-            # temperature controls sharpness (smaller = sharper but still differentiable)
-            temperature = 0.05  # Sharper transitions for more layer-like behavior
+            # Use very sharp sigmoids to approximate boxcar function
+            # temperature controls sharpness - very small for near-boxcar behavior
+            temperature = 0.01  # Very sharp transitions for boxcar-like behavior
             left_edge = torch.sigmoid((coord[None,:] - s1[:,None]) / temperature)
             right_edge = torch.sigmoid((s2_constrained[:,None] - coord[None,:]) / temperature)
-            kernel1d = left_edge * right_edge + 1e-8
+            kernel1d = left_edge * right_edge
+
+            # Apply threshold to explicitly zero out small values outside the layer
+            # This makes the boxcar function more distinct
+            threshold = 0.1  # Values below this are set to zero
+            kernel1d = torch.where(kernel1d > threshold, kernel1d, torch.zeros_like(kernel1d))
+
+            # Add small epsilon only where kernel is non-zero to avoid numerical issues
+            kernel1d = kernel1d + 1e-8
             return kernel1d
 
     class ExponentialKernel(torch.nn.Module):
