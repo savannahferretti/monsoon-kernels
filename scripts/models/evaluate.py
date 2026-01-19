@@ -128,6 +128,7 @@ def inference(model,split,result,uselocal,device):
     predslist = []
     featslist = []
     weights = None
+    component_weights = None
     with torch.no_grad():
         for batch in dataloader:
             fieldpatch = batch['fieldpatch'].to(device)
