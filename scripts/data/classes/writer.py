@@ -17,7 +17,7 @@ class PredictionWriter:
         '''
         self.fieldvars = list(fieldvars)
 
-    def to_array(self,data,kind,*,centers=None,refda=None,nkernels=None,kerneldims=None,patchshape=None,nonparam=False):
+    def to_array(self,data,kind,*,centers=None,refda=None,kerneldims=None,patchshape=None,nonparam=False):
         '''
         Purpose: Put raw outputs (predictions/features/weights) into the right dense ndarray shape.
         Args:
@@ -25,7 +25,6 @@ class PredictionWriter:
         - kind (str): predictions, features, or weights
         - centers (list[tuple[int,int,int]] | None): list of (latidx, lonidx, timeidx) patch centers (preds/features)
         - refda (xr.DataArray | None): reference DataArray with target grid (preds/features)
-        - nkernels (int | None): number of kernels (preds/features)
         - kerneldims (list[str] | tuple[str] | None): dims the kernel varies along (weights/features)
         - patchshape (tuple[int,int,int,int] | None): patch shape as (plats, plons, plevs, ptimes) (features)
         - nonparam (bool): whether kernel is non-parametric
@@ -38,37 +37,22 @@ class PredictionWriter:
 
         if kind=='predictions':
             nlats,nlons,ntimes = refda.shape
-            member = bool(nonparam and data.ndim==2 and data.shape[1]==nkernels)
-            arr = np.full((nkernels,nlats,nlons,ntimes) if member else refda.shape,np.nan,dtype=np.float32)
+            arr = np.full(refda.shape,np.nan,dtype=np.float32)
             for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                if member:
-                    arr[:,latidx,lonidx,timeidx] = data[i]
-                else:
-                    arr[latidx,lonidx,timeidx] = data[i]
-            return arr,{'kind':'predictions','member':member}
+                arr[latidx,lonidx,timeidx] = data[i]
+            return arr,{'kind':'predictions'}
 
         if kind=='features':
             nlats,nlons,ntimes = refda.shape
-
-            if data.ndim < 4:
-                raise ValueError('Feature array must have shape (nsamples, field, member, ...)')
-
+            if data.ndim < 3:
+                raise ValueError('Feature array must have shape (nsamples, field, ...)')
             if kerneldims is None or patchshape is None:
                 raise ValueError('`kerneldims` and `patchshape` required for feature formatting')
-
-            if nkernels is None:
-                raise ValueError('`nkernels` required for feature formatting')
-
             nsamples = data.shape[0]
             if data.shape[1] != len(fieldvars):
                 raise ValueError('`data.shape[1]` must equal len(fieldvars)')
-            if data.shape[2] != nkernels:
-                raise ValueError('`data.shape[2]` must equal nkernels')
-
             kerneldims = tuple(kerneldims)
             plats,plons,plevs,ptimes = patchshape
-
-            # preserved dims = dims NOT integrated over
             remdims  = []
             remshape = []
             if 'lat' not in kerneldims:
@@ -83,15 +67,11 @@ class PredictionWriter:
             if 'time' not in kerneldims:
                 remdims.append('patch_time')
                 remshape.append(ptimes)
-
-            if tuple(data.shape[3:]) != tuple(remshape):
-                raise ValueError(f'Preserved feature dims mismatch: got {data.shape[3:]}, expected {tuple(remshape)}')
-            arr = np.full((nkernels,len(fieldvars),*remshape,nlats,nlons,ntimes),np.nan,dtype=np.float32)
-
+            if tuple(data.shape[2:]) != tuple(remshape):
+                raise ValueError(f'Preserved feature dims mismatch: got {data.shape[2:]}, expected {tuple(remshape)}')
+            arr = np.full((len(fieldvars),*remshape,nlats,nlons,ntimes),np.nan,dtype=np.float32)
             for i,(latidx,lonidx,timeidx) in enumerate(centers):
-                block = data[i].transpose(1,0,*range(3,data[i].ndim))
-                arr[...,latidx,lonidx,timeidx] = block
-
+                arr[...,latidx,lonidx,timeidx] = data[i]
             return arr,{'kind':'features','remdims':remdims,'nonparam':nonparam}
 
         if kind=='weights':
@@ -120,14 +100,13 @@ class PredictionWriter:
 
         raise ValueError(f'Unknown kind `{kind}`')
 
-    def to_dataset(self,arr,meta,*,refda=None,refds=None,nkernels=None,componentweights=None,seedaxis=False):
+    def to_dataset(self,arr,meta,*,refda=None,refds=None,componentweights=None,seedaxis=False):
         '''
         Purpose: Wrap a dense ndarray into an xr.Dataset with dims/coords/attrs.
         Args:
         - arr (np.ndarray): shaped dense array from to_array()
         - meta (dict[str,object]): metadata returned by to_array()
         - refda (xr.DataArray | None): reference DataArray for coords (preds/features)
-        - nkernels (int | None): number of kernels (preds/features)
         - componentweights (np.ndarray | None): component weights for mixture kernels [ncomponents, ...]
         - seedaxis (bool): whether arr has seed dimension as last axis (defaults to False)
         Returns:
@@ -139,12 +118,8 @@ class PredictionWriter:
         if kind=='predictions':
             if refda is None:
                 raise ValueError('`refda` required for prediction dataset construction')
-            if meta.get('member',False):
-                dims = ('member',)+refda.dims
-                coords = {'member':np.arange(nkernels),**refda.coords}
-            else:
-                dims = refda.dims
-                coords = dict(refda.coords)
+            dims = refda.dims
+            coords = dict(refda.coords)
             if seedaxis:
                 dims = dims + ('seed',)
                 coords['seed'] = np.arange(arr.shape[-1])
@@ -155,21 +130,15 @@ class PredictionWriter:
         if kind=='features':
             if refda is None:
                 raise ValueError('`refda` required for feature dataset construction')
-            if nkernels is None:
-                raise ValueError('`nkernels` required for feature dataset construction')
-
             remdims = tuple(meta.get('remdims', ()))
             ds = xr.Dataset()
-
-            coords = {'member': np.arange(nkernels), **refda.coords}
-            # arr shape: (member, field, *remshape, lat, lon, time)
-            for ax, dim in enumerate(remdims, start=2):
+            coords = dict(refda.coords)
+            for ax, dim in enumerate(remdims, start=1):
                 coords[dim] = np.arange(arr.shape[ax])
-
             for fieldidx, varname in enumerate(fieldvars):
                 da = xr.DataArray(
-                    arr[:, fieldidx, ...],
-                    dims=('member',) + remdims + refda.dims,
+                    arr[fieldidx, ...],
+                    dims=remdims + refda.dims,
                     coords=coords,
                     name=varname
                 )

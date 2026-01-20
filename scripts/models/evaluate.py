@@ -121,7 +121,6 @@ def inference(model,split,result,uselocal,device):
     dataloader = result['loaders'][split]
     havekernel = hasattr(model,'intkernel')
     nonparam = bool(havekernel and ('nonparametric' in model.intkernel.__class__.__name__.lower()))
-    nkernels = int(getattr(model,'nkernels',1)) if havekernel else 1
     kerneldims = tuple(getattr(model,'kerneldims',())) if havekernel else tuple()
     model.eval()
     predslist = []
@@ -165,7 +164,6 @@ def inference(model,split,result,uselocal,device):
         'componentweights':componentweights,
         'havekernel':havekernel,
         'nonparam':nonparam,
-        'nkernels':nkernels,
         'kerneldims':kerneldims}
 
 if __name__=='__main__':
@@ -207,7 +205,6 @@ if __name__=='__main__':
         allcomponents = []
         havekernel = None
         nonparam = None
-        nkernels = None
         kerneldims = None
         for seedidx,seed in enumerate(seeds):
             logger.info(f'   Seed {seedidx+1}/{len(seeds)}: {seed}')
@@ -219,10 +216,9 @@ if __name__=='__main__':
             if havekernel is None:
                 havekernel = info['havekernel']
                 nonparam = info['nonparam']
-                nkernels = info['nkernels']
                 kerneldims = info['kerneldims']
             arr,meta = out.to_array(info['predictions'],'predictions',
-                centers=centers,refda=refda,nkernels=nkernels,nonparam=nonparam)
+                centers=centers,refda=refda,nonparam=nonparam)
             allpreds.append(arr)
             if havekernel:
                 warr,wmeta = out.to_array(
@@ -237,7 +233,7 @@ if __name__=='__main__':
             logger.info('   Combining results from all seeds...')
             predsstack = np.stack(allpreds,axis=-1)
             logger.info('   Formatting/saving predictions...')
-            ds = out.to_dataset(predsstack,meta,refda=refda,nkernels=nkernels,seedaxis=True)
+            ds = out.to_dataset(predsstack,meta,refda=refda,seedaxis=True)
             out.save(name,ds,'predictions',split,PREDSDIR)
             del predsstack,ds
             if havekernel:

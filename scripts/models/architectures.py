@@ -86,9 +86,7 @@ class KernelNN(torch.nn.Module):
         self.nfieldvars  = int(intkernel.nfieldvars)
         self.nlocalvars  = int(nlocalvars)
         self.uselocal    = bool(uselocal)
-        self.nkernels    = int(intkernel.nkernels)
         self.kerneldims  = tuple(intkernel.kerneldims)
-
         plats, plons, plevs, ptimes = patchshape
         preservedsize = 1
         if 'lat' not in self.kerneldims:
@@ -99,7 +97,7 @@ class KernelNN(torch.nn.Module):
             preservedsize *= plevs
         if 'time' not in self.kerneldims:
             preservedsize *= ptimes
-        nfeatures = self.nfieldvars * self.nkernels * preservedsize
+        nfeatures = self.nfieldvars * preservedsize
         if self.uselocal:
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)
