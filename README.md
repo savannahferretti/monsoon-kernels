@@ -8,25 +8,22 @@ Data-Driven Integration Kernels for the Interpretable Machine Learning of Nonloc
 Project Organization
 ------------
 ```
-├── LICENSE.md         <- License for code
+├── LICENSE.md  <- License for code
 │
-├── README.md          <- Top-level information on this code base/manuscript
+├── README.md   <- Top-level information on this code base/manuscript
 │
 ├── data/
-│   ├── raw/           <- Original ERA5 and IMERG V06 data
-│   ├── interim/       <- Intermediate data that has been transformed
-│   ├── splits/        <- Training, validation, and test sets
-│   ├── predictions/   <- Model predictions
-│   └── weights/       <- Learned kernel weights
+│   ├── raw/          <- Original ERA5 and IMERG V06 data
+│   ├── interim/      <- Intermediate data that has been transformed
+│   ├── splits/       <- Training, validation, and test sets
+│   ├── predictions/  <- Model predictions
+│   └── weights/      <- Learned kernel weights
 │
-├── figs/              <- Generated figures/graphics
+├── figs/       <- Generated figures/graphics
 │
-├── models/
-│   ├── baseline/      <- Saved baseline NN models
-│   ├── nonparametric/ <- Saved nonparametric kernel NN models
-│   └── parametric/    <- Saved parametric kernel NN models
+├── models/     <- Saved baseline NNs, nonparametric kernel NNs, and parametric kernel NNs
 │
-├── notebooks/         <- Jupyter notebooks for data analysis and visualizations
+├── notebooks/  <- Jupyter notebooks for data analysis and visualizations
 │
 ├── scripts/
 │   ├── data/
@@ -37,14 +34,14 @@ Project Organization
 │   │
 │   ├── models/
 │   │   ├── classes/          <- Model building, training, and inferencing classes
-│   │   ├── architectures.py  <- Neural network architectures
+│   │   ├── architectures.py  <- NN architectures
 │   │   ├── kernels.py        <- Kernel layers
 │   │   ├── train.py          <- Execution script for training models
 │   │   └── evaluate.py       <- Execution script for model evaluation
 │   │
-│   └── utils.py       <- Configuration and utility functions
+│   └── utils.py     <- Configuration and utility functions
 │
-└── environment.yml    <- File for reproducing the analysis environment
+└── environment.yml  <- File for reproducing the analysis environment
 ```
 
 Acknowledgements
