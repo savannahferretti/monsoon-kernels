@@ -231,31 +231,16 @@ class ParametricKernelLayer(torch.nn.Module):
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
             s1 = torch.min(self.lower,self.upper)
             s2 = torch.max(self.lower,self.upper)
-
-            # Constrain width to be at most 75% of full range to prevent uniform kernels
-            # This ensures the kernel must select specific layers, not all of them
-            max_width = 1.5  # 75% of full range [-1, 1]
+            maxwidth = 1.5
             width = s2 - s1
-            # Soft constraint: if width exceeds max, compress it
-            width_constrained = torch.where(width > max_width,
-                                           max_width * torch.tanh(width / max_width),
-                                           width)
-            s2_constrained = s1 + width_constrained
-
-            # Use very sharp sigmoids to approximate boxcar function
-            # temperature controls sharpness - very small for near-boxcar behavior
-            temperature = 0.01  # Very sharp transitions for boxcar-like behavior
-            left_edge = torch.sigmoid((coord[None,:] - s1[:,None]) / temperature)
-            right_edge = torch.sigmoid((s2_constrained[:,None] - coord[None,:]) / temperature)
-            kernel1d = left_edge * right_edge
-
-            # Apply strict threshold to make values exactly zero outside the layer
-            # This creates a true boxcar: constant inside, exactly zero outside
-            threshold = 0.5  # Values below this are set to exactly zero
+            widthconstrained = torch.where(width > maxwidth,maxwidth * torch.tanh(width / maxwidth),width)
+            s2constrained = s1 + widthconstrained
+            temperature = 0.01
+            leftedge = torch.sigmoid((coord[None,:] - s1[:,None]) / temperature)
+            rightedge = torch.sigmoid((s2constrained[:,None] - coord[None,:]) / temperature)
+            kernel1d = leftedge * rightedge
+            threshold = 0.5
             kernel1d = torch.where(kernel1d > threshold, kernel1d, torch.zeros_like(kernel1d))
-
-            # Add small epsilon to non-zero values for numerical stability during training
-            # This doesn't affect the "exactly zero" property outside the layer
             kernel1d = torch.where(kernel1d > 0, kernel1d + 1e-8, kernel1d)
 
             return kernel1d
@@ -370,17 +355,12 @@ class ParametricKernelLayer(torch.nn.Module):
             coord = torch.linspace(-1.0, 1.0, steps=length, device=device)
             width1 = torch.exp(self.logwidth1).clamp(min=0.1, max=2.0)
             width2 = torch.exp(self.logwidth2).clamp(min=0.1, max=2.0)
-
-            # Compute two Gaussian components
             dist1 = coord[None,:] - self.center1[:,None]
             dist2 = coord[None,:] - self.center2[:,None]
             gauss1 = torch.exp(-dist1**2 / (2 * width1[:,None]**2))
             gauss2 = torch.exp(-dist2**2 / (2 * width2[:,None]**2))
-
-            # Return weighted components separately
             component1 = self.weight1[:,None] * gauss1
             component2 = self.weight2[:,None] * gauss2
-
             return component1, component2
 
         def forward(self,length,device):
@@ -398,11 +378,7 @@ class ParametricKernelLayer(torch.nn.Module):
             - Examples: two peaks, center-surround, or single peak with negative surround
             '''
             component1, component2 = self.get_components(length, device)
-
-            # Combine components
             kernel1d = component1 + component2
-
-            # Add small epsilon to avoid all-zero kernels
             kernel1d = kernel1d + 1e-8
             return kernel1d
 
@@ -427,29 +403,29 @@ class ParametricKernelLayer(torch.nn.Module):
         self.dlevfull = None
         self.functions = torch.nn.ModuleDict()
         self.perfield = {}
-        has_horizontal_exponential = ('lat' in kerneldict and 'lon' in kerneldict and
+        hashorizontalexponential = ('lat' in kerneldict and 'lon' in kerneldict and
             ((isinstance(kerneldict['lat'],str) and kerneldict['lat']=='exponential') or
              (isinstance(kerneldict['lat'],list) and 'exponential' in kerneldict['lat'])) and
             ((isinstance(kerneldict['lon'],str) and kerneldict['lon']=='exponential') or
              (isinstance(kerneldict['lon'],list) and 'exponential' in kerneldict['lon'])))
-        for dim,function_spec in self.kerneldict.items():
-            if has_horizontal_exponential and dim in ('lat','lon'):
+        for dim,functionspec in self.kerneldict.items():
+            if hashorizontalexponential and dim in ('lat','lon'):
                 if dim=='lat':
-                    if isinstance(function_spec,list):
+                    if isinstance(functionspec,list):
                         raise ValueError('Per-field kernels not supported for horizontal exponential (lat+lon must use same exponential)')
                     self.perfield['horizontal'] = False
                     self.functions['horizontal'] = self._create_kernel('exponential',self.nfieldvars,'horizontal')
                 continue
-            if isinstance(function_spec,list):
-                if len(function_spec)!=self.nfieldvars:
-                    raise ValueError(f'Per-field kernel list for dim `{dim}` must have length {self.nfieldvars}, got {len(function_spec)}')
+            if isinstance(functionspec,list):
+                if len(functionspec)!=self.nfieldvars:
+                    raise ValueError(f'Per-field kernel list for dim `{dim}` must have length {self.nfieldvars}, got {len(functionspec)}')
                 self.perfield[dim] = True
                 self.functions[dim] = torch.nn.ModuleList([
-                    self._create_kernel(func,1,dim) for func in function_spec
+                    self._create_kernel(func,1,dim) for func in functionspec
                 ])
             else:
                 self.perfield[dim] = False
-                self.functions[dim] = self._create_kernel(function_spec,self.nfieldvars,dim)
+                self.functions[dim] = self._create_kernel(functionspec,self.nfieldvars,dim)
 
     def _create_kernel(self,function,nfieldvars,dim):
         '''
@@ -501,18 +477,18 @@ class ParametricKernelLayer(torch.nn.Module):
         plevs = self.dlevfull.numel()
         ptimes = dtimepatch0.numel()
         kernel = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
-        has_horizontal = 'horizontal' in self.functions
-        if has_horizontal:
+        hashorizontal = 'horizontal' in self.functions
+        if hashorizontal:
             kernel2d = self.functions['horizontal'].forward_horizontal((plats,plons),device)
             kernel = kernel*kernel2d.view(self.nfieldvars,plats,plons,1,1)
         for ax,dim in enumerate(('lat','lon','lev','time'),start=1):
-            if has_horizontal and dim in ('lat','lon'):
+            if hashorizontal and dim in ('lat','lon'):
                 continue
             if dim in self.kerneldims:
                 if self.perfield.get(dim,False):
                     kernel1d_list = []
-                    for field_idx,field_kernel in enumerate(self.functions[dim]):
-                        kernel1d_field = field_kernel(kernel.shape[ax],device)
+                    for fieldidx,fieldkernel in enumerate(self.functions[dim]):
+                        kernel1d_field = fieldkernel(kernel.shape[ax],device)
                         kernel1d_list.append(kernel1d_field)
                     kernel1d = torch.cat(kernel1d_list,dim=0)
                 else:
@@ -521,69 +497,65 @@ class ParametricKernelLayer(torch.nn.Module):
                 view[ax] = kernel.shape[ax]
                 kernel = kernel*kernel1d.view(*view)
         normkerneldims = list(self.kerneldims)
-        if has_horizontal and 'lat' not in normkerneldims:
+        if hashorizontal and 'lat' not in normkerneldims:
             normkerneldims.extend(['lat','lon'])
         self.weights = KernelModule.normalize(kernel,dareapatch0,self.dlevfull,dtimepatch0,normkerneldims)
-
-        # Compute component weights for mixture kernels (for separate visualization)
-        # Only compute when explicitly requested (e.g., during evaluation, not training)
         self.component_weights = None
         if not compute_components:
             return self.weights
-
-        has_mixture = False
+        hasmixture = False
         for dim in self.kerneldims:
             if self.perfield[dim]:
                 # Check if any field uses mixture kernel
-                for field_kernel in self.functions[dim]:
-                    if isinstance(field_kernel, self.MixtureGaussianKernel):
-                        has_mixture = True
+                for fieldkernel in self.functions[dim]:
+                    if isinstance(fieldkernel, self.MixtureGaussianKernel):
+                        hasmixture = True
                         break
             else:
                 if isinstance(self.functions[dim], self.MixtureGaussianKernel):
-                    has_mixture = True
-            if has_mixture:
+                    hasmixture = True
+            if hasmixture:
                 break
 
-        if has_mixture:
-            kernel_c1 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
-            kernel_c2 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
-            if has_horizontal:
+        if hasmixture:
+            kernelc1 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
+            kernelc2 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
+            if hashorizontal:
                 kernel2d = self.functions['horizontal'].forward_horizontal((plats,plons),device)
-                kernel_c1 = kernel_c1*kernel2d.view(self.nfieldvars,plats,plons,1,1)
-                kernel_c2 = kernel_c2*kernel2d.view(self.nfieldvars,plats,plons,1,1)
+                kernelc1 = kernelc1*kernel2d.view(self.nfieldvars,plats,plons,1,1)
+                kernelc2 = kernelc2*kernel2d.view(self.nfieldvars,plats,plons,1,1)
             for ax,dim in enumerate(('lat','lon','lev','time'),start=1):
-                if has_horizontal and dim in ('lat','lon'):
+                if hashorizontal and dim in ('lat','lon'):
                     continue
                 if dim in self.kerneldims:
                     if self.perfield.get(dim,False):
-                        kernel1d_c1_list = []
-                        kernel1d_c2_list = []
-                        for field_idx,field_kernel in enumerate(self.functions[dim]):
-                            if isinstance(field_kernel,self.MixtureGaussianKernel):
-                                c1,c2 = field_kernel.get_components(kernel_c1.shape[ax],device)
-                                kernel1d_c1_list.append(c1)
-                                kernel1d_c2_list.append(c2)
+                        kernel1dc1list = []
+                        kernel1dc2list = []
+                        for fieldidx,fieldkernel in enumerate(self.functions[dim]):
+                            if isinstance(fieldkernel,self.MixtureGaussianKernel):
+                                c1,c2 = fieldkernel.get_components(kernelc1.shape[ax],device)
+                                kernel1dc1list.append(c1)
+                                kernel1dc2list.append(c2)
                             else:
-                                kernel1d = field_kernel(kernel_c1.shape[ax],device)
-                                kernel1d_c1_list.append(kernel1d)
-                                kernel1d_c2_list.append(kernel1d)
-                        kernel1d_c1 = torch.cat(kernel1d_c1_list,dim=0)
-                        kernel1d_c2 = torch.cat(kernel1d_c2_list,dim=0)
+                                kernel1d = fieldkernel(kernelc1.shape[ax],device)
+                                kernel1dc1list.append(kernel1d)
+                                kernel1dc2list.append(kernel1d)
+                        kernel1dc1 = torch.cat(kernel1dc1list,dim=0)
+                        kernel1dc2 = torch.cat(kernel1dc2list,dim=0)
                     else:
                         if isinstance(self.functions[dim],self.MixtureGaussianKernel):
-                            kernel1d_c1,kernel1d_c2 = self.functions[dim].get_components(kernel_c1.shape[ax],device)
+                            kernel1dc1,kernel1dc2 = self.functions[dim].get_components(kernelc1.shape[ax],device)
                         else:
-                            kernel1d = self.functions[dim](kernel_c1.shape[ax],device)
-                            kernel1d_c1 = kernel1d
-                            kernel1d_c2 = kernel1d
-                    view = [kernel_c1.shape[0],1,1,1,1]
-                    view[ax] = kernel_c1.shape[ax]
-                    kernel_c1 = kernel_c1*kernel1d_c1.view(*view)
-                    kernel_c2 = kernel_c2*kernel1d_c2.view(*view)
-            weights_c1 = KernelModule.normalize(kernel_c1,dareapatch0,self.dlevfull,dtimepatch0,normkerneldims)
-            weights_c2 = KernelModule.normalize(kernel_c2,dareapatch0,self.dlevfull,dtimepatch0,normkerneldims)
-            self.component_weights = torch.stack([weights_c1,weights_c2],dim=0)
+                            kernel1d = self.functions[dim](kernelc1.shape[ax],device)
+                            kernel1dc1 = kernel1d
+                            kernel1dc2 = kernel1d
+                    view = [kernelc1.shape[0],1,1,1,1]
+                    view[ax] = kernelc1.shape[ax]
+                    kernelc1 = kernelc1*kernel1dc1.view(*view)
+                    kernelc2 = kernelc2*kernel1dc2.view(*view)
+            weightsc1 = KernelModule.normalize(kernelc1,dareapatch0,self.dlevfull,dtimepatch0,normkerneldims)
+            weightsc2 = KernelModule.normalize(kernelc2,dareapatch0,self.dlevfull,dtimepatch0,normkerneldims)
+            self.component_weights = torch.stack([weightsc1,weightsc2],dim=0)
 
         return self.weights
 

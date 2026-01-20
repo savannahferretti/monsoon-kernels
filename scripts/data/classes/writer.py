@@ -120,7 +120,7 @@ class PredictionWriter:
 
         raise ValueError(f'Unknown kind `{kind}`')
 
-    def to_dataset(self,arr,meta,*,refda=None,refds=None,nkernels=None,component_weights=None):
+    def to_dataset(self,arr,meta,*,refda=None,refds=None,nkernels=None,componentweights=None,seedaxis=False):
         '''
         Purpose: Wrap a dense ndarray into an xr.Dataset with dims/coords/attrs.
         Args:
@@ -128,7 +128,8 @@ class PredictionWriter:
         - meta (dict[str,object]): metadata returned by to_array()
         - refda (xr.DataArray | None): reference DataArray for coords (preds/features)
         - nkernels (int | None): number of kernels (preds/features)
-        - component_weights (np.ndarray | None): component weights for mixture kernels [ncomponents, ...]
+        - componentweights (np.ndarray | None): component weights for mixture kernels [ncomponents, ...]
+        - seedaxis (bool): whether arr has seed dimension as last axis (defaults to False)
         Returns:
         - xr.Dataset: Dataset ready to save
         '''
@@ -139,9 +140,15 @@ class PredictionWriter:
             if refda is None:
                 raise ValueError('`refda` required for prediction dataset construction')
             if meta.get('member',False):
-                da = xr.DataArray(arr,dims=('member',)+refda.dims,coords={'member':np.arange(nkernels),**refda.coords},name='pr')
+                dims = ('member',)+refda.dims
+                coords = {'member':np.arange(nkernels),**refda.coords}
             else:
-                da = xr.DataArray(arr,dims=refda.dims,coords=refda.coords,name='pr')
+                dims = refda.dims
+                coords = dict(refda.coords)
+            if seedaxis:
+                dims = dims + ('seed',)
+                coords['seed'] = np.arange(arr.shape[-1])
+            da = xr.DataArray(arr,dims=dims,coords=coords,name='pr')
             da.attrs = dict(long_name='Predicted precipitation rate (log1p-transformed and standardized)',units='N/A')
             return da.to_dataset()
 
@@ -172,7 +179,6 @@ class PredictionWriter:
 
         if kind=='weights':
             dims   = meta['dims0'] + meta['dims1']
-
             coords = dict(meta['coords0'])
             start = len(meta['dims0'])
             for ax,dim in enumerate(meta['dims1'],start=start):
@@ -184,36 +190,29 @@ class PredictionWriter:
                         coords[dim] = refds[dim].values
                         continue
                 coords[dim] = np.arange(arr.shape[ax])
-
+            if seedaxis:
+                dims = dims + ('seed',)
+                coords['seed'] = np.arange(arr.shape[-1])
             ds = xr.Dataset()
             long_name_base = 'Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights'
-
-            # If component weights provided, create k1, k2, etc. variables
-            if component_weights is not None:
-                # Need to process component_weights with the same indexing as main weights
+            if componentweights is not None:
                 alldims = ['field','lat','lon','lev','time']
                 kerneldims = tuple(d for d in ('lat','lon','lev','time') if d in meta['dims1'])
-
                 keep = ('field',)
                 indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
                 nfields_original = len(self.fieldvars)
-
-                for i in range(component_weights.shape[0]):
-                    comp_arr = component_weights[i]
-                    # Apply same indexing as main weights
+                for i in range(componentweights.shape[0]):
+                    comp_arr = componentweights[i]
                     comp_arr = comp_arr[tuple(indexer)]
-                    # Extract only the first len(fieldvars) channels (same as for arr)
                     if comp_arr.shape[0] > nfields_original:
                         comp_arr = comp_arr[:nfields_original]
                     da = xr.DataArray(comp_arr, dims=dims, coords=coords, name=f'k{i+1}')
                     da.attrs = dict(long_name=f'{long_name_base} (component {i+1})', units='N/A')
                     ds[f'k{i+1}'] = da
             else:
-                # Single kernel: use 'k' as variable name
                 da = xr.DataArray(arr, dims=dims, coords=coords, name='k')
                 da.attrs = dict(long_name=long_name_base, units='N/A')
                 ds['k'] = da
-
             return ds
 
         raise ValueError(f'Unknown kind `{kind}` in meta')
@@ -234,7 +233,7 @@ class PredictionWriter:
         '''
         os.makedirs(savedir,exist_ok=True)
         if seed is not None:
-            filename = f'{name}_seed{seed}_{split}_{kind}.nc'
+            filename = f'{name}_{seed}_{split}_{kind}.nc'
         else:
             filename = f'{name}_{split}_{kind}.nc'
         filepath = os.path.join(savedir,filename)

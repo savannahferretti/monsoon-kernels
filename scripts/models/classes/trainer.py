@@ -61,10 +61,9 @@ class Trainer:
         Returns:
         - bool: True if save successful, False otherwise
         '''
-        savedir = os.path.join(self.modeldir,kind)
-        os.makedirs(savedir,exist_ok=True)
-        filename = f'{name}_seed{self.seed}.pth'
-        filepath = os.path.join(savedir,filename)
+        os.makedirs(self.modeldir,exist_ok=True)
+        filename = f'{name}_{self.seed}.pth'
+        filepath = os.path.join(self.modeldir,filename)
         logger.info(f'      Attempting to save {filename}...')
         try:
             torch.save(state,filepath)

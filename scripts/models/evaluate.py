@@ -80,9 +80,8 @@ def load(name,modelconfig,result,device,fieldvars=FIELDVARS,localvars=LOCALVARS,
     - torch.nn.Module: model with loaded state_dict on 'device' or None if checkpoint not found
     '''
     kind     = modelconfig['kind']
-    filedir  = os.path.join(modeldir,kind)
-    filename = f'{name}_seed{seed}.pth'
-    filepath = os.path.join(filedir,filename)
+    filename = f'{name}_{seed}.pth'
+    filepath = os.path.join(modeldir,filename)
     if not os.path.exists(filepath):
         logger.error(f'   Checkpoint not found: {filepath}')
         return None
@@ -128,7 +127,7 @@ def inference(model,split,result,uselocal,device):
     predslist = []
     featslist = []
     weights = None
-    component_weights = None
+    componentweights = None
     with torch.no_grad():
         for batch in dataloader:
             fieldpatch = batch['fieldpatch'].to(device)
@@ -144,12 +143,12 @@ def inference(model,split,result,uselocal,device):
                         raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
                     weights = model.intkernel.weights.detach().cpu().numpy()
                     # Compute component weights for mixture kernels (only for parametric kernels)
-                    component_weights = None
+                    componentweights = None
                     if not nonparam and hasattr(model.intkernel, 'get_weights'):
                         # Parametric kernel: explicitly compute components
                         _ = model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,device,compute_components=True)
-                        if model.intkernel.component_weights is not None:
-                            component_weights = model.intkernel.component_weights.detach().cpu().numpy()
+                        if model.intkernel.componentweights is not None:
+                            componentweights = model.intkernel.componentweights.detach().cpu().numpy()
                 if model.intkernel.features is not None:
                     featslist.append(model.intkernel.features.detach().cpu().numpy())
             else:
@@ -158,12 +157,12 @@ def inference(model,split,result,uselocal,device):
     preds = np.concatenate(predslist,axis=0).astype(np.float32)
     feats = np.concatenate(featslist,axis=0).astype(np.float32) if featslist else None
     weights = weights.astype(np.float32) if weights is not None else None
-    component_weights = component_weights.astype(np.float32) if component_weights is not None else None
+    componentweights = componentweights.astype(np.float32) if componentweights is not None else None
     return {
         'predictions':preds,
         'features':feats,
         'weights':weights,
-        'component_weights':component_weights,
+        'componentweights':componentweights,
         'havekernel':havekernel,
         'nonparam':nonparam,
         'nkernels':nkernels,
@@ -186,55 +185,66 @@ if __name__=='__main__':
         if models is not None and name not in models:
             continue
         seeds = modelconfig.get('seeds',config.seeds)
-        for seed in seeds:
-            modelname = f'{name}_seed{seed}' if len(seeds)>1 else name
-            # Check if predictions already exist
-            predictions_path = os.path.join(PREDSDIR,f'{name}_seed{seed}_{split}_predictions.nc')
-            if os.path.exists(predictions_path):
-                logger.info(f'Skipping `{modelname}`: predictions already exist at {predictions_path}')
-                continue
-            logger.info(f'Evaluating `{modelname}`...')
-            patchconfig = modelconfig['patch']
-            uselocal = modelconfig['uselocal']
-            currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
-            if currentconfig==cachedconfig:
-                result = cachedresult
-            else:
-                result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,maxradius,maxtimelag)
-                cachedconfig = currentconfig
-                cachedresult = result
+        predictionspath = os.path.join(PREDSDIR,f'{name}_{split}_predictions.nc')
+        if os.path.exists(predictionspath):
+            logger.info(f'Skipping `{name}`: predictions already exist at {predictionspath}')
+            continue
+        logger.info(f'Evaluating `{name}` across {len(seeds)} seed(s)...')
+        patchconfig = modelconfig['patch']
+        uselocal = modelconfig['uselocal']
+        currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
+        if currentconfig==cachedconfig:
+            result = cachedresult
+        else:
+            result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,LATRANGE,LONRANGE,BATCHSIZE,WORKERS,device,maxradius,maxtimelag)
+            cachedconfig = currentconfig
+            cachedresult = result
+        centers = result['centers'][split]
+        refda = splitdata[split]['refda']
+        patchshape = result['geometry'].shape()
+        allpreds = []
+        allweights = []
+        allcomponents = []
+        havekernel = None
+        nonparam = None
+        nkernels = None
+        kerneldims = None
+        for seedidx,seed in enumerate(seeds):
+            logger.info(f'   Seed {seedidx+1}/{len(seeds)}: {seed}')
             model = load(name,modelconfig,result,device,seed=seed)
             if model is None:
-                continue
+                logger.error(f'   Failed to load model for seed {seed}, skipping this model entirely')
+                break
             info = inference(model,split,result,uselocal,device)
-            centers = result['centers'][split]
-            refda = splitdata[split]['refda']
-            patchshape = result['geometry'].shape()
-            logger.info('   Formatting/saving predictions...')
+            if havekernel is None:
+                havekernel = info['havekernel']
+                nonparam = info['nonparam']
+                nkernels = info['nkernels']
+                kerneldims = info['kerneldims']
             arr,meta = out.to_array(info['predictions'],'predictions',
-                centers=centers,refda=refda,nkernels=info['nkernels'],nonparam=info['nonparam'])
-            ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-            out.save(name,ds,'predictions',split,PREDSDIR,seed=seed)
-            del arr,meta,ds
-            if info['havekernel']:
+                centers=centers,refda=refda,nkernels=nkernels,nonparam=nonparam)
+            allpreds.append(arr)
+            if havekernel:
+                warr,wmeta = out.to_array(
+                    info['weights'],'weights',
+                    kerneldims=kerneldims,
+                    nonparam=nonparam)
+                allweights.append(warr)
+                if info['componentweights'] is not None:
+                    allcomponents.append(info['componentweights'])
+            del model
+        else:
+            logger.info('   Combining results from all seeds...')
+            predsstack = np.stack(allpreds,axis=-1)
+            logger.info('   Formatting/saving predictions...')
+            ds = out.to_dataset(predsstack,meta,refda=refda,nkernels=nkernels,seedaxis=True)
+            out.save(name,ds,'predictions',split,PREDSDIR)
+            del predsstack,ds
+            if havekernel:
+                weightsstack = np.stack(allweights,axis=-1)
+                componentstack = np.stack(allcomponents,axis=-1) if allcomponents else None
                 logger.info('   Formatting/saving normalized kernel weights...')
                 refds = xr.open_dataset(os.path.join(SPLITDIR,'valid.h5'),engine='h5netcdf')
-                arr,meta = out.to_array(
-                    info['weights'],'weights',
-                    kerneldims=info['kerneldims'],
-                    nonparam=info['nonparam'])
-                ds = out.to_dataset(arr,meta,refds=refds,component_weights=info['component_weights'])
-                out.save(name,ds,'weights',split,WEIGHTSDIR,seed=seed)
-                del arr,meta,ds
-                # Skipping kernel-integrated features - not needed
-                # if info['features'] is not None:
-                #     logger.info('   Formatting/saving kernel-integrated features...')
-                #     arr,meta = out.to_array(
-                #         info['features'],'features',
-                #         centers=centers,refda=refda,nkernels=info['nkernels'],
-                #         kerneldims=info['kerneldims'],patchshape=patchshape,
-                #         nonparam=info['nonparam'])
-                #     ds = out.to_dataset(arr,meta,refda=refda,nkernels=info['nkernels'])
-                #     out.save(name,ds,'features',split,FEATSDIR,seed=seed)
-                #     del arr,meta,ds
-            del model
+                ds = out.to_dataset(weightsstack,wmeta,refds=refds,componentweights=componentstack,seedaxis=True)
+                out.save(name,ds,'weights',split,WEIGHTSDIR)
+                del weightsstack,componentstack,ds
