@@ -147,7 +147,7 @@ class PredictionWriter:
             return ds
 
         if kind=='weights':
-            dims   = meta['dims0'] + meta['dims1']
+            dims   = tuple(meta['dims0'] + meta['dims1'])
             coords = dict(meta['coords0'])
             start = len(meta['dims0'])
             for ax,dim in enumerate(meta['dims1'],start=start):
@@ -160,7 +160,7 @@ class PredictionWriter:
                         continue
                 coords[dim] = np.arange(arr.shape[ax])
             if seedaxis:
-                dims = dims + ['seed']
+                dims = dims + ('seed',)
                 coords['seed'] = np.arange(arr.shape[-1])
             ds = xr.Dataset()
             long_name_base = 'Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights'
