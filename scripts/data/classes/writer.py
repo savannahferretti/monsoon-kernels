@@ -121,7 +121,7 @@ class PredictionWriter:
             dims = refda.dims
             coords = dict(refda.coords)
             if seedaxis:
-                dims = dims + ('seed',)
+                dims = dims + ['seed']
                 coords['seed'] = np.arange(arr.shape[-1])
             da = xr.DataArray(arr,dims=dims,coords=coords,name='pr')
             da.attrs = dict(long_name='Predicted precipitation rate (log1p-transformed and standardized)',units='N/A')
@@ -160,7 +160,7 @@ class PredictionWriter:
                         continue
                 coords[dim] = np.arange(arr.shape[ax])
             if seedaxis:
-                dims = dims + ('seed',)
+                dims = dims + ['seed']
                 coords['seed'] = np.arange(arr.shape[-1])
             ds = xr.Dataset()
             long_name_base = 'Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights'
