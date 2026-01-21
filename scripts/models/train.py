@@ -113,5 +113,5 @@ if __name__=='__main__':
                 use_amp=True,
                 grad_accum_steps=1,
                 compile_model=False)
-            trainer.fit(modelname,kind,uselocal)
+            trainer.fit(name,kind,uselocal)
             del model,trainer

@@ -62,7 +62,7 @@ class Trainer:
         - bool: True if save successful, False otherwise
         '''
         os.makedirs(self.modeldir,exist_ok=True)
-        filename = f'{name}.pth'
+        filename = f'{name}_{self.seed}.pth'
         filepath = os.path.join(self.modeldir,filename)
         logger.info(f'      Attempting to save {filename}...')
         try:
