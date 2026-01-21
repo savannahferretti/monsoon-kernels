@@ -417,8 +417,11 @@ class ParametricKernelLayer(torch.nn.Module):
                     self.functions['horizontal'] = self._create_kernel('exponential',self.nfieldvars,'horizontal')
                 continue
             if isinstance(functionspec,list):
-                if len(functionspec)!=self.nfieldvars:
-                    raise ValueError(f'Per-field kernel list for dim `{dim}` must have length {self.nfieldvars}, got {len(functionspec)}')
+                npredictors = self.nfieldvars - 1
+                if len(functionspec)==npredictors:
+                    functionspec = functionspec + ['gaussian']
+                elif len(functionspec)!=self.nfieldvars:
+                    raise ValueError(f'Per-field kernel list for dim `{dim}` must have length {npredictors} (excluding mask) or {self.nfieldvars} (including mask), got {len(functionspec)}')
                 self.perfield[dim] = True
                 self.functions[dim] = torch.nn.ModuleList([
                     self._create_kernel(func,1,dim) for func in functionspec
