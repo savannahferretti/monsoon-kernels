@@ -398,7 +398,7 @@ class ParametricKernelLayer(torch.nn.Module):
         self.kerneldict = dict(kerneldict)
         self.kerneldims = tuple(kerneldict.keys())
         self.weights = None
-        self.component_weights = None
+        self.componentweights = None
         self.features = None
         self.dlevfull = None
         self.functions = torch.nn.ModuleDict()
@@ -500,7 +500,7 @@ class ParametricKernelLayer(torch.nn.Module):
         if hashorizontal and 'lat' not in normkerneldims:
             normkerneldims.extend(['lat','lon'])
         self.weights = KernelModule.normalize(kernel,dareapatch0,self.dlevfull,dtimepatch0,normkerneldims)
-        self.component_weights = None
+        self.componentweights = None
         if not compute_components:
             return self.weights
         hasmixture = False
@@ -555,7 +555,7 @@ class ParametricKernelLayer(torch.nn.Module):
                     kernelc2 = kernelc2*kernel1dc2.view(*view)
             weightsc1 = KernelModule.normalize(kernelc1,dareapatch0,self.dlevfull,dtimepatch0,normkerneldims)
             weightsc2 = KernelModule.normalize(kernelc2,dareapatch0,self.dlevfull,dtimepatch0,normkerneldims)
-            self.component_weights = torch.stack([weightsc1,weightsc2],dim=0)
+            self.componentweights = torch.stack([weightsc1,weightsc2],dim=0)
 
         return self.weights
 
