@@ -203,11 +203,10 @@ class ParametricKernelLayer(torch.nn.Module):
             - nfieldvars (int): number of predictor fields
             - dim (str): dimension name ('lat', 'lon', 'lev', 'time', or 'horizontal')
             Notes:
-            - Implements smooth approximation: k^(TH)(s; a, b) ≈ σ((s-a)/τ) * σ((b-s)/τ)
-            - Uses sigmoid transitions instead of hard boundaries for differentiability
+            - Implements indicator function: k^(TH)(s; a, b) = 𝕀(s ∈ [min(a,b), max(a,b)])
             - Parameters a and b are learned bounds in normalized coordinate space [-1, 1]
-            - Approximates uniform weight within bounds, near-zero outside
-            - Handles boundaries naturally (e.g., for vertical: a or b can be at -1 or +1)
+            - Hard boxcar: constant weight inside bounds, exactly zero outside
+            - Width is constrained to prevent uniform distribution across all levels
             '''
             super().__init__()
             self.dim = dim
@@ -225,7 +224,7 @@ class ParametricKernelLayer(torch.nn.Module):
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
             - For vertical: -1 ≈ top of atmosphere, +1 ≈ surface
-            - Implements a sharp boxcar function: constant weight inside layer, exactly zero outside
+            - True boxcar: value 1 inside bounds, value 0 outside
             - Width is constrained to prevent uniform distribution across all levels
             '''
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
@@ -235,14 +234,8 @@ class ParametricKernelLayer(torch.nn.Module):
             width = s2 - s1
             widthconstrained = torch.where(width > maxwidth,maxwidth * torch.tanh(width / maxwidth),width)
             s2constrained = s1 + widthconstrained
-            temperature = 0.01
-            leftedge = torch.sigmoid((coord[None,:] - s1[:,None]) / temperature)
-            rightedge = torch.sigmoid((s2constrained[:,None] - coord[None,:]) / temperature)
-            kernel1d = leftedge * rightedge
-            threshold = 0.5
-            kernel1d = torch.where(kernel1d > threshold, kernel1d, torch.zeros_like(kernel1d))
-            kernel1d = torch.where(kernel1d > 0, kernel1d + 1e-8, kernel1d)
-
+            inside = (coord[None,:] >= s1[:,None]) & (coord[None,:] <= s2constrained[:,None])
+            kernel1d = inside.float() + 1e-8
             return kernel1d
 
     class ExponentialKernel(torch.nn.Module):
