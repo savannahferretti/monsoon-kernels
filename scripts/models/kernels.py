@@ -224,7 +224,7 @@ class ParametricKernelLayer(torch.nn.Module):
             Notes:
             - Uses normalized coordinates s ∈ [-1, 1]
             - For vertical: -1 ≈ top of atmosphere, +1 ≈ surface
-            - True boxcar: value 1 inside bounds, value 0 outside
+            - Approximates boxcar with very sharp sigmoid transitions for differentiability
             - Width is constrained to prevent uniform distribution across all levels
             '''
             coord = torch.linspace(-1.0,1.0,steps=length,device=device)
@@ -234,8 +234,10 @@ class ParametricKernelLayer(torch.nn.Module):
             width = s2 - s1
             widthconstrained = torch.where(width > maxwidth,maxwidth * torch.tanh(width / maxwidth),width)
             s2constrained = s1 + widthconstrained
-            inside = (coord[None,:] >= s1[:,None]) & (coord[None,:] <= s2constrained[:,None])
-            kernel1d = inside.float() + 1e-8
+            temperature = 0.02
+            leftedge = torch.sigmoid((coord[None,:] - s1[:,None]) / temperature)
+            rightedge = torch.sigmoid((s2constrained[:,None] - coord[None,:]) / temperature)
+            kernel1d = leftedge * rightedge + 1e-8
             return kernel1d
 
     class ExponentialKernel(torch.nn.Module):
