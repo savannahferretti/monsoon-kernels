@@ -515,31 +515,16 @@ class ParametricKernelLayer(torch.nn.Module):
             if hasmixture:
                 break
 
-        # Check if ALL fields use mixture kernels (not just some)
-        # Component weights only make sense when all fields have true mixture components
-        allmixture = False
+        # Compute component weights when at least one field uses a mixture kernel
+        # For mixture kernels: save both components (c1 and c2)
+        # For non-mixture kernels: save the kernel in c1, and zeros in c2
         if hasmixture:
-            allmixture = True
-            for dim in self.kerneldims:
-                if self.perfield.get(dim,False):
-                    # Check if ALL fields use mixture kernel for this dimension
-                    for fieldkernel in self.functions[dim]:
-                        if not isinstance(fieldkernel, self.MixtureGaussianKernel):
-                            allmixture = False
-                            break
-                else:
-                    if not isinstance(self.functions[dim], self.MixtureGaussianKernel):
-                        allmixture = False
-                if not allmixture:
-                    break
-
-        if allmixture:
             kernelc1 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
-            kernelc2 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
+            kernelc2 = torch.zeros(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
             if hashorizontal:
                 kernel2d = self.functions['horizontal'].forward_horizontal((plats,plons),device)
                 kernelc1 = kernelc1*kernel2d.view(self.nfieldvars,plats,plons,1,1)
-                kernelc2 = kernelc2*kernel2d.view(self.nfieldvars,plats,plons,1,1)
+                # kernelc2 stays zero for horizontal (not a mixture)
             for ax,dim in enumerate(('lat','lon','lev','time'),start=1):
                 if hashorizontal and dim in ('lat','lon'):
                     continue
@@ -548,15 +533,25 @@ class ParametricKernelLayer(torch.nn.Module):
                         kernel1dc1list = []
                         kernel1dc2list = []
                         for fieldidx,fieldkernel in enumerate(self.functions[dim]):
-                            # At this point, all fields must be mixture kernels
-                            c1,c2 = fieldkernel.get_components(kernelc1.shape[ax],device)
-                            kernel1dc1list.append(c1)
-                            kernel1dc2list.append(c2)
+                            if isinstance(fieldkernel,self.MixtureGaussianKernel):
+                                c1,c2 = fieldkernel.get_components(kernelc1.shape[ax],device)
+                                kernel1dc1list.append(c1)
+                                kernel1dc2list.append(c2)
+                            else:
+                                # Non-mixture kernel: use kernel for c1, zeros for c2
+                                kernel1d = fieldkernel(kernelc1.shape[ax],device)
+                                kernel1dc1list.append(kernel1d)
+                                kernel1dc2list.append(torch.zeros_like(kernel1d))
                         kernel1dc1 = torch.cat(kernel1dc1list,dim=0)
                         kernel1dc2 = torch.cat(kernel1dc2list,dim=0)
                     else:
-                        # At this point, the function must be a mixture kernel
-                        kernel1dc1,kernel1dc2 = self.functions[dim].get_components(kernelc1.shape[ax],device)
+                        if isinstance(self.functions[dim],self.MixtureGaussianKernel):
+                            kernel1dc1,kernel1dc2 = self.functions[dim].get_components(kernelc1.shape[ax],device)
+                        else:
+                            # Non-mixture kernel: use kernel for c1, zeros for c2
+                            kernel1d = self.functions[dim](kernelc1.shape[ax],device)
+                            kernel1dc1 = kernel1d
+                            kernel1dc2 = torch.zeros_like(kernel1d)
                     view = [kernelc1.shape[0],1,1,1,1]
                     view[ax] = kernelc1.shape[ax]
                     kernelc1 = kernelc1*kernel1dc1.view(*view)
