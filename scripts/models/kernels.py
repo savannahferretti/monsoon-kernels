@@ -515,7 +515,25 @@ class ParametricKernelLayer(torch.nn.Module):
             if hasmixture:
                 break
 
+        # Check if ALL fields use mixture kernels (not just some)
+        # Component weights only make sense when all fields have true mixture components
+        allmixture = False
         if hasmixture:
+            allmixture = True
+            for dim in self.kerneldims:
+                if self.perfield.get(dim,False):
+                    # Check if ALL fields use mixture kernel for this dimension
+                    for fieldkernel in self.functions[dim]:
+                        if not isinstance(fieldkernel, self.MixtureGaussianKernel):
+                            allmixture = False
+                            break
+                else:
+                    if not isinstance(self.functions[dim], self.MixtureGaussianKernel):
+                        allmixture = False
+                if not allmixture:
+                    break
+
+        if allmixture:
             kernelc1 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
             kernelc2 = torch.ones(self.nfieldvars,plats,plons,plevs,ptimes,dtype=dareapatch0.dtype,device=device)
             if hashorizontal:
@@ -530,23 +548,15 @@ class ParametricKernelLayer(torch.nn.Module):
                         kernel1dc1list = []
                         kernel1dc2list = []
                         for fieldidx,fieldkernel in enumerate(self.functions[dim]):
-                            if isinstance(fieldkernel,self.MixtureGaussianKernel):
-                                c1,c2 = fieldkernel.get_components(kernelc1.shape[ax],device)
-                                kernel1dc1list.append(c1)
-                                kernel1dc2list.append(c2)
-                            else:
-                                kernel1d = fieldkernel(kernelc1.shape[ax],device)
-                                kernel1dc1list.append(kernel1d)
-                                kernel1dc2list.append(kernel1d)
+                            # At this point, all fields must be mixture kernels
+                            c1,c2 = fieldkernel.get_components(kernelc1.shape[ax],device)
+                            kernel1dc1list.append(c1)
+                            kernel1dc2list.append(c2)
                         kernel1dc1 = torch.cat(kernel1dc1list,dim=0)
                         kernel1dc2 = torch.cat(kernel1dc2list,dim=0)
                     else:
-                        if isinstance(self.functions[dim],self.MixtureGaussianKernel):
-                            kernel1dc1,kernel1dc2 = self.functions[dim].get_components(kernelc1.shape[ax],device)
-                        else:
-                            kernel1d = self.functions[dim](kernelc1.shape[ax],device)
-                            kernel1dc1 = kernel1d
-                            kernel1dc2 = kernel1d
+                        # At this point, the function must be a mixture kernel
+                        kernel1dc1,kernel1dc2 = self.functions[dim].get_components(kernelc1.shape[ax],device)
                     view = [kernelc1.shape[0],1,1,1,1]
                     view[ax] = kernelc1.shape[ax]
                     kernelc1 = kernelc1*kernel1dc1.view(*view)
