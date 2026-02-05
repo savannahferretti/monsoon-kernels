@@ -8,8 +8,8 @@ Savannah L. Ferretti<sup>1</sup>, Jerry Lin<sup>2</sup>, Sara Shamekh<sup>3</sup
 <sup>3</sup>The Center for Atmosphere Ocean Science, New York University, New York, NY, USA  
 <sup>4</sup>Lamont-Doherty Earth Observatory, Palisades, NY, USA  
 <sup>5</sup>NVIDIA Corporation, Santa Clara, CA, USA  
-<sup>6</sup>Faculty of Geosciences and Environment, University of Lausanne, Lausanne, VD, CH 
-<sup>7</sup>Expertise Center for Climate Extremes, University of Lausanne, Lausanne, VD, CH 
+<sup>6</sup>Faculty of Geosciences and Environment, University of Lausanne, Lausanne, VD, CH  
+<sup>7</sup>Expertise Center for Climate Extremes, University of Lausanne, Lausanne, VD, CH  
 
 **Status:** Thie paper was submitted to the [15th International Conference on Climate Informatics](https://wp.unil.ch/ci26/). Accepted submissions are automatically forwarded for peer-review at *Environmental Data Science*. We welcome any comments, questions, or suggestions. Please email your feedback to Savannah Ferretti (savannah.ferretti@uci.edu).
 
