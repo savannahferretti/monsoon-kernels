@@ -34,70 +34,44 @@ class PredictionWriter:
         fieldvars = self.fieldvars
         if kind in ('predictions','features') and (refda is None or centers is None):
             raise ValueError('`refda` and `centers` required for prediction/feature formatting')
-
         if kind=='predictions':
-            nlats,nlons,ntimes = refda.shape
             arr = np.full(refda.shape,np.nan,dtype=np.float32)
             for i,(latidx,lonidx,timeidx) in enumerate(centers):
                 arr[latidx,lonidx,timeidx] = data[i]
             return arr,{'kind':'predictions'}
-
         if kind=='features':
             nlats,nlons,ntimes = refda.shape
-            if data.ndim < 3:
+            if data.ndim<3:
                 raise ValueError('Feature array must have shape (nsamples, field, ...)')
             if kerneldims is None or patchshape is None:
                 raise ValueError('`kerneldims` and `patchshape` required for feature formatting')
-            nsamples = data.shape[0]
-            if data.shape[1] != len(fieldvars):
+            if data.shape[1]!=len(fieldvars):
                 raise ValueError('`data.shape[1]` must equal len(fieldvars)')
             kerneldims = tuple(kerneldims)
             plats,plons,plevs,ptimes = patchshape
-            remdims  = []
-            remshape = []
-            if 'lat' not in kerneldims:
-                remdims.append('patch_lat')
-                remshape.append(plats)
-            if 'lon' not in kerneldims:
-                remdims.append('patch_lon')
-                remshape.append(plons)
-            if 'lev' not in kerneldims:
-                remdims.append('patch_lev')
-                remshape.append(plevs)
-            if 'time' not in kerneldims:
-                remdims.append('patch_time')
-                remshape.append(ptimes)
-            if tuple(data.shape[2:]) != tuple(remshape):
+            remdims,remshape = [],[]
+            for dim,size in [('patch_lat',plats),('patch_lon',plons),('patch_lev',plevs),('patch_time',ptimes)]:
+                if dim.split('_')[1] not in kerneldims:
+                    remdims.append(dim)
+                    remshape.append(size)
+            if tuple(data.shape[2:])!=tuple(remshape):
                 raise ValueError(f'Preserved feature dims mismatch: got {data.shape[2:]}, expected {tuple(remshape)}')
             arr = np.full((len(fieldvars),*remshape,nlats,nlons,ntimes),np.nan,dtype=np.float32)
             for i,(latidx,lonidx,timeidx) in enumerate(centers):
                 arr[...,latidx,lonidx,timeidx] = data[i]
             return arr,{'kind':'features','remdims':remdims,'nonparam':nonparam}
-
         if kind=='weights':
             if kerneldims is None:
                 raise ValueError('`kerneldims` required for weight formatting')
             kerneldims = tuple(kerneldims)
-            alldims    = ['field','lat','lon','lev','time']
-
-            # Only save weights for predictor fields (exclude validity_mask channel)
-            # data has shape (nfieldvars, ...) where nfieldvars = len(fieldvars) + 1
-            # We only want to save the first len(fieldvars) channels
-            nfields_original = len(fieldvars)
-
-            keep    = ('field',)
-            dims0   = ['field']
-            coords0 = {'field':fieldvars}
-            dims1   = [dim for dim in ('lat','lon','lev','time') if dim in kerneldims]
-            indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
-
-            # Extract only the first nfields_original channels (exclude validity_mask)
-            arr = data[tuple(indexer)]
-            if arr.shape[0] > nfields_original:
-                arr = arr[:nfields_original]
-
-            return arr,{'kind':'weights','dims0':dims0,'dims1':dims1,'coords0':coords0,'nonparam':nonparam}
-
+            nfields = len(fieldvars)
+            arr = data[tuple(slice(None) if d=='field' or d in kerneldims else 0 for d in ['field','lat','lon','lev','time'])][:nfields]
+            return arr,{
+                'kind':'weights',
+                'fixeddims':['field'],
+                'kerneldims':[d for d in ('lat','lon','lev','time') if d in kerneldims],
+                'fixedcoords':{'field':fieldvars},
+                'nonparam':nonparam}
         raise ValueError(f'Unknown kind `{kind}`')
 
     def to_dataset(self,arr,meta,*,refda=None,refds=None,componentweights=None,seedaxis=False):
@@ -114,76 +88,52 @@ class PredictionWriter:
         '''
         fieldvars = self.fieldvars
         kind = meta.get('kind')
-
         if kind=='predictions':
             if refda is None:
-                raise ValueError('`refda` required for prediction dataset construction')
-            dims = refda.dims
-            coords = dict(refda.coords)
-            if seedaxis:
-                dims = dims + ('seed',)
-                coords['seed'] = np.arange(arr.shape[-1])
-            da = xr.DataArray(arr,dims=dims,coords=coords,name='pr')
-            da.attrs = dict(long_name='Predicted precipitation rate (log1p-transformed and standardized)',units='N/A')
+                raise ValueError('`refda` required for kind==`predictions`')
+            dims = refda.dims+('seed',) if seedaxis else refda.dims
+            coords = dict(refda.coords,**({'seed':np.arange(arr.shape[-1])} if seedaxis else {}))
+            da = xr.DataArray(arr,dims=dims,coords=coords,name='pr',
+                attrs=dict(long_name='Predicted precipitation rate (log1p-transformed and standardized)',units='N/A'))
             return da.to_dataset()
-
         if kind=='features':
             if refda is None:
-                raise ValueError('`refda` required for feature dataset construction')
-            remdims = tuple(meta.get('remdims', ()))
+                raise ValueError('`refda` required for kind==`features`')
+            remdims = tuple(meta.get('remdims',()))
+            coords = {**refda.coords,**{dim:np.arange(arr.shape[ax]) for ax,dim in enumerate(remdims,start=1)}}
             ds = xr.Dataset()
-            coords = dict(refda.coords)
-            for ax, dim in enumerate(remdims, start=1):
-                coords[dim] = np.arange(arr.shape[ax])
-            for fieldidx, varname in enumerate(fieldvars):
-                da = xr.DataArray(
-                    arr[fieldidx, ...],
-                    dims=remdims + refda.dims,
-                    coords=coords,
-                    name=varname
-                )
-                da.attrs = dict(long_name=f'{varname} (kernel-integrated; preserved patch dims)', units='N/A')
-                ds[varname] = da
+            for fieldidx,varname in enumerate(fieldvars):
+                ds[varname] = xr.DataArray(arr[fieldidx,...],dims=remdims+refda.dims,coords=coords,name=varname,
+                    attrs=dict(long_name=f'{varname} (kernel-integrated; preserved patch dims)',units='N/A'))
             return ds
-
         if kind=='weights':
-            dims   = tuple(meta['dims0'] + meta['dims1'])
-            coords = dict(meta['coords0'])
-            start = len(meta['dims0'])
-            for ax,dim in enumerate(meta['dims1'],start=start):
-                if refds is not None:
-                    if dim in refds.coords:
-                        coords[dim] = refds.coords[dim].values
-                        continue
-                    if dim in refds.data_vars:
-                        coords[dim] = refds[dim].values
-                        continue
-                coords[dim] = np.arange(arr.shape[ax])
+            dims = tuple(meta['fixeddims']+meta['kerneldims'])
+            coords = dict(meta['fixedcoords'])
+            for ax,dim in enumerate(meta['kerneldims'],start=len(meta['fixeddims'])):
+                if refds is not None and dim in refds.coords:
+                    coords[dim] = refds.coords[dim].values
+                elif refds is not None and dim in refds.data_vars:
+                    coords[dim] = refds[dim].values
+                else:
+                    coords[dim] = np.arange(arr.shape[ax])
             if seedaxis:
-                dims = dims + ('seed',)
+                dims = dims+('seed',)
                 coords['seed'] = np.arange(arr.shape[-1])
             ds = xr.Dataset()
-            long_name_base = 'Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights'
+            longname = 'Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights'
             if componentweights is not None:
-                alldims = ['field','lat','lon','lev','time']
-                kerneldims = tuple(d for d in ('lat','lon','lev','time') if d in meta['dims1'])
-                keep = ('field',)
-                indexer = [slice(None) if (dim in keep or dim in kerneldims) else 0 for dim in alldims]
-                nfields_original = len(self.fieldvars)
+                indexer = tuple(slice(None) if d=='field' or d in meta['kerneldims'] else 0 for d in ['field','lat','lon','lev','time'])
+                nfields = len(fieldvars)
                 for i in range(componentweights.shape[0]):
-                    comp_arr = componentweights[i]
-                    comp_arr = comp_arr[tuple(indexer)]
-                    if comp_arr.shape[0] > nfields_original:
-                        comp_arr = comp_arr[:nfields_original]
-                    da = xr.DataArray(comp_arr, dims=dims, coords=coords, name=f'k{i+1}')
-                    da.attrs = dict(long_name=f'{long_name_base} (component {i+1})', units='N/A')
-                    ds[f'k{i+1}'] = da
+                    comp = componentweights[i][indexer]
+                    if comp.shape[0]>nfields:
+                        comp = comp[:nfields]
+                    ds[f'k{i+1}'] = xr.DataArray(comp,dims=dims,coords=coords,name=f'k{i+1}',
+                        attrs=dict(long_name=f'{longname} (component {i+1})',units='N/A'))
             else:
-                da = xr.DataArray(arr, dims=dims, coords=coords, name='k')
-                da.attrs = dict(long_name=long_name_base, units='N/A')
-                ds['k'] = da
+                ds['k'] = xr.DataArray(arr,dims=dims,coords=coords,name='k',
+                    attrs=dict(long_name=longname,units='N/A'))
             return ds
-
         raise ValueError(f'Unknown kind `{kind}` in meta')
 
     @staticmethod
