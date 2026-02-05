@@ -187,7 +187,7 @@ class PredictionWriter:
         raise ValueError(f'Unknown kind `{kind}` in meta')
 
     @staticmethod
-    def save(name,ds,kind,split,savedir,seed=None):
+    def save(name,ds,kind,split,savedir):
         '''
         Purpose: Save an xr.Dataset to NetCDF and verify by reopening.
         Args:
@@ -196,15 +196,11 @@ class PredictionWriter:
         - kind (str): predictions, features, or weights
         - split (str): valid or test
         - savedir (str): output directory
-        - seed (int | None): random seed used during training (if None, seed is omitted from filename)
         Returns:
         - bool: True if save successful, False otherwise
         '''
         os.makedirs(savedir,exist_ok=True)
-        if seed is not None:
-            filename = f'{name}_{seed}_{split}_{kind}.nc'
-        else:
-            filename = f'{name}_{split}_{kind}.nc'
+        filename = f'{name}_{split}_{kind}.nc'
         filepath = os.path.join(savedir,filename)
         logger.info(f'   Attempting to save {filename}...')
         try:

@@ -80,7 +80,7 @@ if __name__=='__main__':
             continue
         seeds = modelconfig.get('seeds',config.seeds)
         for seed in seeds:
-            modelname = f'{name}_{seed}' if len(seeds)>1 else name
+            modelname = f'{name}_{seed}'
             checkpointpath = os.path.join(config.modelsdir,f'{name}_{seed}.pth')
             if os.path.exists(checkpointpath):
                 logger.info(f'Skipping `{modelname}`: checkpoint already exists at {checkpointpath}')
