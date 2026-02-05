@@ -5,7 +5,7 @@ Savannah L. Ferretti<sup>1</sup>, Jerry Lin<sup>2</sup>, Sara Shamekh<sup>3</sup
 
 <sup>1</sup>Department of Earth System Science, University of California Irvine, Irvine, CA, USA  
 <sup>2</sup>Department of Computing and Data Science, Boston University, Boston, MA, USA  
-<sup>3</sup>The Center for Atmosphere Ocean Science, New York University, New York, NY, USA 
+<sup>3</sup>The Center for Atmosphere Ocean Science, New York University, New York, NY, USA  
 <sup>4</sup>Lamont-Doherty Earth Observatory, Palisades, NY, USA  
 <sup>5</sup>NVIDIA Corporation, Santa Clara, CA, USA 
 <sup>6</sup>Faculty of Geosciences and Environment, University of Lausanne, Lausanne, VD, CH 
