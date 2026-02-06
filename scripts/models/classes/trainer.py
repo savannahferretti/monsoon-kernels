@@ -84,13 +84,9 @@ class Trainer:
         - float: average training loss for the epoch
         '''
         self.model.train()
-        totalloss = 0.0
         self.optimizer.zero_grad()
-        dataloadtime = 0.0
-        computetime = 0.0
-        batchstart = time.time()
+        totalloss  = 0.0
         for idx,batch in enumerate(self.trainloader):
-            dataloadtime += time.time() - batchstart
             computestart = time.time()
             fieldpatch   = batch['fieldpatch'].to(self.device,non_blocking=True)
             localvalues  = batch['localvalues'].to(self.device,non_blocking=True) if uselocal else None
@@ -125,10 +121,8 @@ class Trainer:
                     self.optimizer.step()
                     self.optimizer.zero_grad()
             totalloss += loss.detach()*self.accumsteps*targetvalues.numel()
-            computetime += time.time() - computestart
-            batchstart = time.time()
         avgloss = (totalloss/len(self.trainloader.dataset)).item()
-        return avgloss,dataloadtime,computetime
+        return avgloss
 
     def validate_epoch(self,uselocal,haskernel):
         '''
@@ -139,8 +133,8 @@ class Trainer:
         Returns:
         - float: average validation loss for the epoch
         '''
-        self.model.eval()
         totalloss = 0.0
+        self.model.eval()
         with torch.no_grad():
             for batch in self.validloader:
                 fieldpatch   = batch['fieldpatch'].to(self.device,non_blocking=True)
@@ -176,33 +170,29 @@ class Trainer:
         - uselocal (bool): whether to use local inputs
         '''
         haskernel = hasattr(self.model,'kernel')
-        trainsamples = len(self.trainloader.dataset)
-        validsamples = len(self.validloader.dataset)
-        logger.info(f'   Training samples: {trainsamples}, Validation samples: {validsamples}')
-        logger.info(f'   Training batches: {len(self.trainloader)}, Validation batches: {len(self.validloader)}')
-        wandb.init(project=self.project,name=name,
-                   config={
-                       'Seed':self.seed,
-                       'Epochs':self.epochs,
-                       'Effective batch size':self.trainloader.batch_size*self.accumsteps,
-                       'Initial learning rate':self.lr,
-                       'Early stopping patience':self.patience,
-                       'Loss function':self.criterion.__class__.__name__,
-                       'Number of parameters':self.model.nparams if hasattr(self.model,'nparams') else sum(p.numel() for p in self.model.parameters()),
-                       'Device':self.device,
-                       'Mixed precision':self.useamp,
-                       'Training samples':trainsamples,
-                       'Validation samples':validsamples})
+        wandb.init(
+            project=self.project,
+            name=name,
+            config={
+                'Seed':self.seed,
+                'Epochs':self.epochs,
+                'Effective batch size':self.trainloader.batch_size*self.accumsteps,
+                'Initial learning rate':self.lr,
+                'Early stopping patience':self.patience,
+                'Loss function':self.criterion.__class__.__name__,
+                'Number of parameters':self.model.nparams if hasattr(self.model,'nparams') else sum(p.numel() for p in self.model.parameters()),
+                'Device':self.device,
+                'Mixed precision':self.useamp,
+                'Training samples':len(self.trainloader.dataset),
+                'Validation samples':len(self.validloader.dataset)})
         beststate = None
         bestloss  = float('inf')
         bestepoch = 0
         noimprove = 0
         starttime = time.time()
         for epoch in range(1,self.epochs+1):
-            epochstart = time.time()
-            trainloss,dataloadtime,computetime = self.train_epoch(uselocal,haskernel)
-            epochtime = time.time() - epochstart
-            validloss = self.validate_epoch(uselocal,haskernel)
+            trainloss  = self.train_epoch(uselocal,haskernel)
+            validloss  = self.validate_epoch(uselocal,haskernel)
             self.scheduler.step(validloss)
             if validloss<bestloss:
                 beststate = {key:value.detach().cpu().clone() for key,value in self.model.state_dict().items()}
@@ -211,20 +201,17 @@ class Trainer:
                 noimprove = 0
             else:
                 noimprove += 1
-            datapct = 100.0*dataloadtime/(dataloadtime+computetime)
-            computepct = 100.0*computetime/(dataloadtime+computetime)
             wandb.log({
                 'Epoch': epoch,
                 'Training loss':trainloss,
                 'Validation loss':validloss,
                 'Learning rate':self.optimizer.param_groups[0]['lr']})
-            logger.info(f'   Epoch {epoch}/{self.epochs}: train_loss={trainloss:.6f}, valid_loss={validloss:.6f}, lr={self.optimizer.param_groups[0]["lr"]:.2e}')
-            logger.info(f'   Timing: epoch={epochtime/60:.1f}min, data={dataloadtime/60:.1f}min ({datapct:.0f}%), compute={computetime/60:.1f}min ({computepct:.0f}%)')
+            logger.info(f'   Epoch {epoch}/{self.epochs} | Training Loss ={trainloss:.5f}, Validation Loss ={validloss:.5f}}')
             if noimprove>=self.patience:
                 break
         duration = time.time()-starttime
         wandb.run.summary.update({'Best validation loss':bestloss})
-        logger.info(f'   Training complete: duration={duration/60:.1f}min, best_epoch={bestepoch}, best_loss={bestloss:.6f}')
+        logger.info(f'   Training completed in {duration/60:.1f} minutes!')
         if beststate is not None:
             self.save_checkpoint(name,beststate,kind)
         wandb.finish()

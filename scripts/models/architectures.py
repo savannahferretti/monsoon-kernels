@@ -97,7 +97,7 @@ class KernelNN(torch.nn.Module):
             preservedsize *= plevs
         if 'time' not in self.kerneldims:
             preservedsize *= ptimes
-        nfeatures = self.nfieldvars * preservedsize
+        nfeatures = self.nfieldvars*preservedsize
         if self.uselocal:
             nfeatures += self.nlocalvars
         self.model = MainNN(nfeatures)

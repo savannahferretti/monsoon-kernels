@@ -79,12 +79,11 @@ if __name__=='__main__':
             continue
         seeds = modelconfig.get('seeds',config.seeds)
         for seed in seeds:
-            modelname      = f'{name}_{seed}'
-            checkpointpath = os.path.join(config.modelsdir,f'{modelname}.pth')
-            if os.path.exists(checkpointpath):
-                logger.info(f'Skipping `{modelname}`, checkpoint already exists')
+            name = f'{name}_{seed}'
+            if os.path.exists(os.path.join(config.modelsdir,f'{name}.pth')):
+                logger.info(f'Skipping `{name}`, checkpoint already exists')
                 continue
-            logger.info(f'Training `{modelname}`...')
+            logger.info(f'Training `{name}`...')
             device        = setup(seed)
             uselocal      = modelconfig['uselocal']
             patchconfig   = modelconfig['patch']

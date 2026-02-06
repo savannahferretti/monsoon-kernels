@@ -18,7 +18,7 @@ class ModelFactory:
         Returns:
         - torch.nn.Module: initialized model
         '''
-        kind = modelconfig['kind']
+        kind     = modelconfig['kind']
         uselocal = modelconfig['uselocal']
         if kind=='baseline':
             model = BaselineNN(patchshape,nfieldvars,nlocalvars,uselocal)

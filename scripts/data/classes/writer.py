@@ -40,7 +40,7 @@ class PredictionWriter:
         if kind=='weights':
             if kerneldims is None:
                 raise ValueError('`kerneldims` required for kind==`weights`')
-            arr = data[tuple(slice(None) if dim=='field' or dim in tuple(kerneldims) else 0 for dim in ['field','lat','lon','lev','time'])][:len(self.fieldvars)]
+            arr  = data[tuple(slice(None) if dim=='field' or dim in tuple(kerneldims) else 0 for dim in ['field','lat','lon','lev','time'])][:len(self.fieldvars)]
             meta = {
                 'kind':'weights',
                 'fixeddims':['field'],
@@ -65,13 +65,13 @@ class PredictionWriter:
         if meta.get('kind')=='predictions':
             if refda is None:
                 raise ValueError('`refda` required for kind==`predictions`')
-            dims = refda.dims+('seed',) if seedaxis else refda.dims
+            dims   = refda.dims+('seed',) if seedaxis else refda.dims
             coords = dict(refda.coords,**({'seed':np.arange(arr.shape[-1])} if seedaxis else {}))
             da = xr.DataArray(arr,dims=dims,coords=coords,name='pr')
             da.attrs = dict(long_name='Predicted precipitation rate (log1p-transformed and standardized)',units='N/A')
             return da.to_dataset()
         if meta.get('kind')=='weights':
-            dims = tuple(meta['fixeddims']+list(meta['kerneldims']))
+            dims   = tuple(meta['fixeddims']+list(meta['kerneldims']))
             coords = dict(meta['fixedcoords'])
             for ax,dim in enumerate(meta['kerneldims'],start=len(meta['fixeddims'])):
                 if refds is not None and dim in refds.coords:
