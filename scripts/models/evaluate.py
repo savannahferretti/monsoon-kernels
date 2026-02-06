@@ -132,7 +132,7 @@ if __name__=='__main__':
             logger.info('   Combining results from all seeds...')
             predstack = np.stack(allpreds,axis=-1)
             logger.info('   Formatting and saving predictions...')
-            ds = writer.to_dataset(predsstack,meta,refda=refda,seedaxis=True)
+            ds = writer.to_dataset(predstack,meta,refda=refda,seedaxis=True)
             writer.save(name,ds,'predictions',split,config.predsdir)
             del predstack,ds
             if haskernel:

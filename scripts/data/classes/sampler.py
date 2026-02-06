@@ -247,7 +247,7 @@ class PatchDataLoader:
                 maxtimelag)
             loaders[split] = torch.utils.data.DataLoader(
                 datasets[split],batch_size=batchsize,shuffle=(split=='train'),
-                 collate_fn=lambda batch,ds=datasets[split]:PatchDataset.collate(batch,ds),**kwargs)
+                collate_fn=lambda batch,ds=datasets[split]:PatchDataset.collate(batch,ds),**kwargs)
             centers[split] = datasets[split].centers
         result = {
             'datasets':datasets,
