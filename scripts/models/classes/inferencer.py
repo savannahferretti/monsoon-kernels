@@ -48,23 +48,25 @@ class Inferencer:
 
     def extract_weights(self,nonparam):
         '''
-        Purpose: Extract normalized kernel weights and optional mixture component weights.
+        Purpose: Extract normalized kernel weights as a list of components.
         Args:
         - nonparam (bool): whether the kernel is non-parametric
         Returns:
-        - tuple[np.ndarray, np.ndarray | None]: weights array and component weights (or None)
+        - list[np.ndarray]: list of component weight arrays (length 1 for single-component, 2 for mixture)
         '''
-        if self.model.intkernel.weights is None:
-            raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
-        weights    = self.model.intkernel.weights.detach().cpu().numpy().astype(np.float32)
-        components = None
-        if not nonparam and hasattr(self.model.intkernel,'get_weights'):
+        if self.model.kernel.norm is None:
+            raise RuntimeError('`model.kernel.norm` was not populated during forward pass')
+        norm = self.model.kernel.norm.detach().cpu().numpy().astype(np.float32)
+        if nonparam:
+            return [norm]
+        if hasattr(self.model.kernel,'get_weights'):
             batch = next(iter(self.dataloader))
             with torch.no_grad():
                 dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
                 dlevfull   = batch['dlevfull'].to(self.device,non_blocking=True)
                 dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
-                self.model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,self.device,compute_components=True)
-            if self.model.intkernel.componentweights is not None:
-                components = self.model.intkernel.componentweights.detach().cpu().numpy().astype(np.float32)
-        return weights,components
+                self.model.kernel.get_weights(dareapatch,dlevfull,dtimepatch,self.device,decompose=True)
+            if self.model.kernel.components is not None:
+                components = self.model.kernel.components.detach().cpu().numpy().astype(np.float32)
+                return [components[i] for i in range(components.shape[0])]
+        return [norm]

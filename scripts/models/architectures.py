@@ -72,21 +72,21 @@ class BaselineNN(torch.nn.Module):
 
 class KernelNN(torch.nn.Module):
 
-    def __init__(self,intkernel,nlocalvars,uselocal,patchshape):
+    def __init__(self,kernel,nlocalvars,uselocal,patchshape):
         '''
         Purpose: Initialize a kernel-based neural network that applies kernels over predictor patches and passes features to MainNN.
         Args:
-        - intkernel (torch.nn.Module): instance of NonparametricKernelLayer or ParametricKernelLayer
+        - kernel (torch.nn.Module): instance of NonparametricKernelLayer or ParametricKernelLayer
         - nlocalvars (int): number of local inputs
         - uselocal (bool): whether to use local inputs
         - patchshape (tuple[int,int,int,int]): patch shape as (plats, plons, plevs, ptimes)
         '''
         super().__init__()
-        self.intkernel   = intkernel
-        self.nfieldvars  = int(intkernel.nfieldvars)
+        self.kernel      = kernel
+        self.nfieldvars  = int(kernel.nfieldvars)
         self.nlocalvars  = int(nlocalvars)
         self.uselocal    = bool(uselocal)
-        self.kerneldims  = tuple(intkernel.kerneldims)
+        self.kerneldims  = tuple(kernel.kerneldims)
         plats, plons, plevs, ptimes = patchshape
         preservedsize = 1
         if 'lat' not in self.kerneldims:
@@ -115,7 +115,7 @@ class KernelNN(torch.nn.Module):
         Returns:
         - torch.Tensor: predictions with shape (nbatch,)
         '''
-        features = self.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull)
+        features = self.kernel(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull)
         if self.uselocal:
             if localvalues is None:
                 raise ValueError('`localvalues` must be provided when `uselocal` is True')
@@ -123,4 +123,3 @@ class KernelNN(torch.nn.Module):
         else:
             X = features
         return self.model(X)
-

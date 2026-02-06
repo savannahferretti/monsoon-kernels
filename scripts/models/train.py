@@ -108,8 +108,8 @@ if __name__=='__main__':
                 patience=config.patience,
                 criterion=config.criterion,
                 epochs=config.epochs,
-                use_amp=True,
-                grad_accum_steps=1,
-                compile_model=False)
+                useamp=True,
+                accumsteps=1,
+                compile=False)
             trainer.fit(name,kind,uselocal)
             del model,trainer

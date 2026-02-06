@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Trainer:
 
     def __init__(self,model,trainloader,validloader,device,modeldir,project,seed,lr=1e-3,patience=5,
-                 criterion='MSELoss',epochs=100,use_amp=True,grad_accum_steps=1,compile_model=False):
+                 criterion='MSELoss',epochs=100,useamp=True,accumsteps=1,compile=False):
         '''
         Purpose: Initialize Trainer with model, dataloaders, and training configuration.
         Args:
@@ -27,27 +27,27 @@ class Trainer:
         - patience (int): early stopping patience (defaults to 5)
         - criterion (str): loss function name (defaults to MSELoss)
         - epochs (int): maximum number of epochs (defaults to 100)
-        - use_amp (bool): whether to use automatic mixed precision (defaults to True for CUDA)
-        - grad_accum_steps (int): gradient accumulation steps for larger effective batch size (defaults to 1)
-        - compile_model (bool): whether to use torch.compile for faster training (defaults to False)
+        - useamp (bool): whether to use automatic mixed precision (defaults to True for CUDA)
+        - accumsteps (int): gradient accumulation steps for larger effective batch size (defaults to 1)
+        - compile (bool): whether to use torch.compile for faster training (defaults to False)
         '''
-        self.model          = model
-        self.trainloader    = trainloader
-        self.validloader    = validloader
-        self.device         = device
-        self.modeldir       = modeldir
-        self.project        = project
-        self.seed           = seed
-        self.lr             = lr
-        self.patience       = patience
-        self.epochs         = epochs
-        self.use_amp        = use_amp and (device=='cuda')
-        self.grad_accum_steps = grad_accum_steps
-        self.optimizer      = torch.optim.Adam(self.model.parameters(),lr=lr)
-        self.scheduler      = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,mode='min',factor=0.5,patience=2,min_lr=1e-6)
-        self.scaler         = GradScaler('cuda') if self.use_amp else None
-        self.criterion      = getattr(torch.nn,criterion)()
-        if compile_model and hasattr(torch,'compile'):
+        self.model       = model
+        self.trainloader = trainloader
+        self.validloader = validloader
+        self.device      = device
+        self.modeldir    = modeldir
+        self.project     = project
+        self.seed        = seed
+        self.lr          = lr
+        self.patience    = patience
+        self.epochs      = epochs
+        self.useamp      = useamp and (device=='cuda')
+        self.accumsteps  = accumsteps
+        self.optimizer   = torch.optim.Adam(self.model.parameters(),lr=lr)
+        self.scheduler   = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer,mode='min',factor=0.5,patience=2,min_lr=1e-6)
+        self.scaler      = GradScaler('cuda') if self.useamp else None
+        self.criterion   = getattr(torch.nn,criterion)()
+        if compile and hasattr(torch,'compile'):
             logger.info('   Compiling model with torch.compile...')
             self.model = torch.compile(self.model)
 
@@ -83,7 +83,6 @@ class Trainer:
         Returns:
         - float: average training loss for the epoch
         '''
-        import time
         self.model.train()
         totalloss = 0.0
         self.optimizer.zero_grad()
@@ -101,16 +100,16 @@ class Trainer:
                 dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
                 dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
                 dlevfull   = batch['dlevfull'].to(self.device,non_blocking=True)
-            if self.use_amp:
-                with autocast('cuda',enabled=self.use_amp):
+            if self.useamp:
+                with autocast('cuda',enabled=self.useamp):
                     if haskernel:
                         outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                     else:
                         outputvalues = self.model(fieldpatch,localvalues)
                     loss = self.criterion(outputvalues,targetvalues)
-                    loss = loss/self.grad_accum_steps
+                    loss = loss/self.accumsteps
                 self.scaler.scale(loss).backward()
-                if (idx+1)%self.grad_accum_steps==0 or (idx+1)==len(self.trainloader):
+                if (idx+1)%self.accumsteps==0 or (idx+1)==len(self.trainloader):
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                     self.optimizer.zero_grad()
@@ -120,12 +119,12 @@ class Trainer:
                 else:
                     outputvalues = self.model(fieldpatch,localvalues)
                 loss = self.criterion(outputvalues,targetvalues)
-                loss = loss/self.grad_accum_steps
+                loss = loss/self.accumsteps
                 loss.backward()
-                if (idx+1)%self.grad_accum_steps==0 or (idx+1)==len(self.trainloader):
+                if (idx+1)%self.accumsteps==0 or (idx+1)==len(self.trainloader):
                     self.optimizer.step()
                     self.optimizer.zero_grad()
-            totalloss += loss.detach()*self.grad_accum_steps*targetvalues.numel()
+            totalloss += loss.detach()*self.accumsteps*targetvalues.numel()
             computetime += time.time() - computestart
             batchstart = time.time()
         avgloss = (totalloss/len(self.trainloader.dataset)).item()
@@ -152,8 +151,8 @@ class Trainer:
                     dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
                     dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
                     dlevfull   = batch['dlevfull'].to(self.device,non_blocking=True)
-                if self.use_amp:
-                    with autocast('cuda',enabled=self.use_amp):
+                if self.useamp:
+                    with autocast('cuda',enabled=self.useamp):
                         if haskernel:
                             outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                         else:
@@ -176,7 +175,7 @@ class Trainer:
         - kind (str): baseline, nonparametric, or parametric
         - uselocal (bool): whether to use local inputs
         '''
-        haskernel = hasattr(self.model,'intkernel')
+        haskernel = hasattr(self.model,'kernel')
         trainsamples = len(self.trainloader.dataset)
         validsamples = len(self.validloader.dataset)
         logger.info(f'   Training samples: {trainsamples}, Validation samples: {validsamples}')
@@ -185,13 +184,13 @@ class Trainer:
                    config={
                        'Seed':self.seed,
                        'Epochs':self.epochs,
-                       'Effective batch size':self.trainloader.batch_size*self.grad_accum_steps,
+                       'Effective batch size':self.trainloader.batch_size*self.accumsteps,
                        'Initial learning rate':self.lr,
                        'Early stopping patience':self.patience,
                        'Loss function':self.criterion.__class__.__name__,
                        'Number of parameters':self.model.nparams if hasattr(self.model,'nparams') else sum(p.numel() for p in self.model.parameters()),
                        'Device':self.device,
-                       'Mixed precision':self.use_amp,
+                       'Mixed precision':self.useamp,
                        'Training samples':trainsamples,
                        'Validation samples':validsamples})
         beststate = None
