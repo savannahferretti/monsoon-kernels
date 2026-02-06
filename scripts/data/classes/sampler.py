@@ -144,9 +144,8 @@ class PatchDataset(torch.utils.data.Dataset):
                 time2D[:,None,None,None,:]].permute(1,0,2,3,4,5).contiguous()
             valid6D = dataset.lev[None,None,None,None,:,None]<=ps4D[:,None,:,:,None,:]
         if dataset.timelag>0 and timemask is not None and timemask.any():
-            tm = timemask[:,None,None,None,None,:]
-            field6D = field6D.masked_fill(tm.expand(-1,nfieldvars,plats,plons,plevs,-1),0)
-            valid6D = valid6D.masked_fill(tm.expand(-1,1,plats,plons,plevs,-1),0.0)
+            field6D = field6D.masked_fill(timemask[:,None,None,None,None,:].expand(-1,nfieldvars,plats,plons,plevs,-1),0)
+            valid6D = valid6D.masked_fill(timemask[:,None,None,None,None,:].expand(-1,1,plats,plons,plevs,-1),0.0)
         field6D = field6D.masked_fill(~valid6D.expand(-1,nfieldvars,-1,-1,-1,-1),0.0)
         field6D = torch.cat([field6D,valid6D.float()],dim=1)
         dtime2D = dataset.dtime[time2D].contiguous()
@@ -248,7 +247,7 @@ class PatchDataLoader:
                 maxtimelag)
             loaders[split] = torch.utils.data.DataLoader(
                 datasets[split],batch_size=batchsize,shuffle=(split=='train'),
-                collatefunction=lambda batch,ds=datasets[split]:PatchDataset.collate(batch,ds),**kwargs)
+                 collate_fn=lambda batch,ds=datasets[split]:PatchDataset.collate(batch,ds),**kwargs)
             centers[split] = datasets[split].centers
         result = {
             'datasets':datasets,
