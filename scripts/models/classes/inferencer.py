@@ -10,7 +10,7 @@ class Inferencer:
 
     def __init__(self,model,dataloader,device):
         '''
-        Purpose: Initialize Inferencer for model predictions on test/validation data.
+        Purpose: Initialize Inferencer for model evaluation on test/validation data.
         Args:
         - model (torch.nn.Module): trained model instance
         - dataloader (torch.utils.data.DataLoader): dataloader for inference
@@ -27,60 +27,44 @@ class Inferencer:
         - uselocal (bool): whether to use local inputs
         - haskernel (bool): whether model has integration kernel
         Returns:
-        - np.ndarray: predictions array with shape (nsamples,) or (nsamples, nkernels)
+        - np.ndarray: predictions array with shape (nsamples,)
         '''
         self.model.eval()
-        predictions = []
-        with torch.no_grad():
-            for batch in self.dataloader:
-                fieldpatch   = batch['fieldpatch'].to(self.device,non_blocking=True)
-                localvalues  = batch['localvalues'].to(self.device,non_blocking=True) if uselocal else None
-                if haskernel:
-                    dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
-                    dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
-                    dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
-                    outputvalues = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,localvalues)
-                    del fieldpatch,localvalues,dareapatch,dlevpatch,dtimepatch
-                else:
-                    outputvalues = self.model(fieldpatch,localvalues)
-                    del fieldpatch,localvalues
-                predictions.append(outputvalues.cpu().numpy())
-                del outputvalues
-        return np.concatenate(predictions,axis=0)
-
-
-    def extract_features(self,uselocal):
-        '''
-        Purpose: Extract kernel features for all samples in the dataloader.
-        Args:
-        - uselocal (bool): whether to use local inputs
-        Returns:
-        - np.ndarray: features array with shape (nsamples, nfeatures)
-        '''
-        if not hasattr(self.model,'intkernel'):
-            raise ValueError('Model must have integration kernel to extract features')
-        self.model.eval()
-        features = []
+        predslist = []
         with torch.no_grad():
             for batch in self.dataloader:
                 fieldpatch = batch['fieldpatch'].to(self.device,non_blocking=True)
-                dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
-                dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
-                dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
-                _ = self.model.intkernel(fieldpatch,dareapatch,dlevpatch,dtimepatch)
-                featuretensor = self.model.intkernel.features
-                features.append(featuretensor.cpu().numpy())
-        return np.concatenate(features,axis=0)
+                localvalues = batch['localvalues'].to(self.device,non_blocking=True) if uselocal else None
+                if haskernel:
+                    dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
+                    dlevpatch = batch['dlevpatch'].to(self.device,non_blocking=True)
+                    dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
+                    dlevfull = batch['dlevfull'].to(self.device,non_blocking=True)
+                    output = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
+                else:
+                    output = self.model(fieldpatch,localvalues)
+                predslist.append(output.detach().cpu().numpy())
+        return np.concatenate(predslist,axis=0).astype(np.float32)
 
-    def extract_weights(self):
+    def extract_weights(self,nonparam):
         '''
-        Purpose: Extract kernel weights from the model.
+        Purpose: Extract normalized kernel weights and optional mixture component weights.
+        Args:
+        - nonparam (bool): whether the kernel is non-parametric
         Returns:
-        - np.ndarray: weights array
+        - tuple[np.ndarray, np.ndarray | None]: weights array and component weights (or None)
         '''
-        if not hasattr(self.model,'intkernel'):
-            raise ValueError('Model must have integration kernel to extract weights')
-        self.model.eval()
-        with torch.no_grad():
-            weights = self.model.intkernel.weights.cpu().numpy()
-        return weights
+        if self.model.intkernel.weights is None:
+            raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
+        weights = self.model.intkernel.weights.detach().cpu().numpy().astype(np.float32)
+        components = None
+        if not nonparam and hasattr(self.model.intkernel,'get_weights'):
+            batch = next(iter(self.dataloader))
+            with torch.no_grad():
+                dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
+                dlevfull = batch['dlevfull'].to(self.device,non_blocking=True)
+                dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
+                self.model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,self.device,compute_components=True)
+            if self.model.intkernel.componentweights is not None:
+                components = self.model.intkernel.componentweights.detach().cpu().numpy().astype(np.float32)
+        return weights,components
