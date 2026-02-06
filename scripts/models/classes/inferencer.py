@@ -64,7 +64,7 @@ class Inferencer:
                 dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
                 dlevfull   = batch['dlevfull'].to(self.device,non_blocking=True)
                 dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
-                self.model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,self.device,compute_components=True)
+                self.model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,self.device,decompose=True)
             if self.model.intkernel.componentweights is not None:
                 components = self.model.intkernel.componentweights.detach().cpu().numpy().astype(np.float32)
         return weights,components
