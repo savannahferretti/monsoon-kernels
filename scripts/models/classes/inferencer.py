@@ -33,16 +33,16 @@ class Inferencer:
         predslist = []
         with torch.no_grad():
             for batch in self.dataloader:
-                fieldpatch = batch['fieldpatch'].to(self.device,non_blocking=True)
+                fieldpatch  = batch['fieldpatch'].to(self.device,non_blocking=True)
                 localvalues = batch['localvalues'].to(self.device,non_blocking=True) if uselocal else None
                 if haskernel:
                     dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
-                    dlevpatch = batch['dlevpatch'].to(self.device,non_blocking=True)
+                    dlevpatch  = batch['dlevpatch'].to(self.device,non_blocking=True)
                     dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
-                    dlevfull = batch['dlevfull'].to(self.device,non_blocking=True)
-                    output = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
+                    dlevfull   = batch['dlevfull'].to(self.device,non_blocking=True)
+                    output     = self.model(fieldpatch,dareapatch,dlevpatch,dtimepatch,dlevfull,localvalues)
                 else:
-                    output = self.model(fieldpatch,localvalues)
+                    output     = self.model(fieldpatch,localvalues)
                 predslist.append(output.detach().cpu().numpy())
         return np.concatenate(predslist,axis=0).astype(np.float32)
 
@@ -56,13 +56,13 @@ class Inferencer:
         '''
         if self.model.intkernel.weights is None:
             raise RuntimeError('`model.intkernel.weights` was not populated during forward pass')
-        weights = self.model.intkernel.weights.detach().cpu().numpy().astype(np.float32)
+        weights    = self.model.intkernel.weights.detach().cpu().numpy().astype(np.float32)
         components = None
         if not nonparam and hasattr(self.model.intkernel,'get_weights'):
             batch = next(iter(self.dataloader))
             with torch.no_grad():
                 dareapatch = batch['dareapatch'].to(self.device,non_blocking=True)
-                dlevfull = batch['dlevfull'].to(self.device,non_blocking=True)
+                dlevfull   = batch['dlevfull'].to(self.device,non_blocking=True)
                 dtimepatch = batch['dtimepatch'].to(self.device,non_blocking=True)
                 self.model.intkernel.get_weights(dareapatch,dlevfull,dtimepatch,self.device,compute_components=True)
             if self.model.intkernel.componentweights is not None:
