@@ -79,8 +79,8 @@ if __name__=='__main__':
     device = setup(config.seeds[0])
     models,split = parse()
     logger.info('Preparing evaluation split...')
-    splitdata = PatchDataLoader.prepare([split],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
-    maxradius = max(m['patch']['radius'] for m in config.models)
+    splitdata  = PatchDataLoader.prepare([split],config.fieldvars,config.localvars,config.targetvar,config.splitsdir)
+    maxradius  = max(m['patch']['radius'] for m in config.models)
     maxtimelag = max(m['patch']['timelag'] for m in config.models)
     writer = PredictionWriter(config.fieldvars)
     cachedconfig = None
@@ -90,13 +90,12 @@ if __name__=='__main__':
         if models is not None and name not in models:
             continue
         seeds = modelconfig.get('seeds',config.seeds)
-        predspath = os.path.join(config.predsdir,f'{name}_{split}_predictions.nc')
-        if os.path.exists(predspath):
-            logger.info(f'Skipping `{name}`: predictions already exist at {predspath}')
+        if os.path.exists(os.path.join(config.predsdir,f'{name}_{split}_predictions.nc')):
+            logger.info(f'Skipping `{name}`, predictions already exist')
             continue
         logger.info(f'Evaluating `{name}` across {len(seeds)} seed(s)...')
-        uselocal = modelconfig['uselocal']
-        patchconfig = modelconfig['patch']
+        uselocal      = modelconfig['uselocal']
+        patchconfig   = modelconfig['patch']
         currentconfig = (patchconfig['radius'],patchconfig['levmode'],patchconfig['timelag'],uselocal)
         if currentconfig==cachedconfig:
             result = cachedresult
@@ -104,26 +103,26 @@ if __name__=='__main__':
             result = PatchDataLoader.dataloaders(splitdata,patchconfig,uselocal,config.latrange,config.lonrange,config.batchsize,config.workers,device,maxradius,maxtimelag)
             cachedconfig = currentconfig
             cachedresult = result
-        haskernel = modelconfig['kind']!='baseline'
-        nonparam = modelconfig['kind']=='nonparametric'
+        haskernel  = modelconfig['kind']!='baseline'
+        nonparam   = modelconfig['kind']=='nonparametric'
         kerneldims = tuple(modelconfig.get('kerneldims',modelconfig.get('kerneldict',{}).keys()))
         centers = result['centers'][split]
-        refda = splitdata[split]['refda']
-        allpreds = []
+        refda   = splitdata[split]['refda']
+        allpreds      = []
         allcomponents = []
         for seedidx,seed in enumerate(seeds):
-            logger.info(f'   Seed {seedidx+1}/{len(seeds)}: {seed}')
+            logger.info(f'   Seed {seedidx+1}/{len(seeds)} ({seed})...')
             model = load(name,modelconfig,result,device,config.fieldvars,config.localvars,config.modelsdir,seed)
             if model is None:
                 logger.error(f'   Failed to load model for seed {seed}, skipping this model entirely')
                 break
             inferencer = Inferencer(model,result['loaders'][split],device)
-            preds = inferencer.predict(uselocal,haskernel)
-            arr,meta = writer.to_array(preds,'predictions',centers=centers,refda=refda)
+            preds      = inferencer.predict(uselocal,haskernel)
+            arr,meta   = writer.to_array(preds,'predictions',centers=centers,refda=refda)
             allpreds.append(arr)
             if haskernel:
                 components = inferencer.extract_weights(nonparam)
-                seedcomps = []
+                seedcomps  = []
                 for comp in components:
                     warr,wmeta = writer.to_array(comp,'weights',kerneldims=kerneldims,nonparam=nonparam)
                     seedcomps.append(warr)
@@ -131,16 +130,16 @@ if __name__=='__main__':
             del model,inferencer
         else:
             logger.info('   Combining results from all seeds...')
-            predsstack = np.stack(allpreds,axis=-1)
-            logger.info('   Formatting/saving predictions...')
+            predstack = np.stack(allpreds,axis=-1)
+            logger.info('   Formatting and saving predictions...')
             ds = writer.to_dataset(predsstack,meta,refda=refda,seedaxis=True)
             writer.save(name,ds,'predictions',split,config.predsdir)
-            del predsstack,ds
+            del predstack,ds
             if haskernel:
-                ncomps = len(allcomponents[0])
+                ncomps  = len(allcomponents[0])
                 stacked = [np.stack([s[i] for s in allcomponents],axis=-1) for i in range(ncomps)]
-                logger.info('   Formatting/saving normalized kernel weights...')
+                logger.info('   Formatting and saving normalized kernel weights...')
                 refds = xr.open_dataset(os.path.join(config.splitsdir,'valid.h5'),engine='h5netcdf')
-                ds = writer.to_dataset(stacked,wmeta,refds=refds,seedaxis=True)
+                ds    = writer.to_dataset(stacked,wmeta,refds=refds,seedaxis=True)
                 writer.save(name,ds,'weights',split,config.weightsdir)
                 del stacked,ds
