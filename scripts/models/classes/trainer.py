@@ -175,7 +175,7 @@ class Trainer:
         - kind (str): baseline, nonparametric, or parametric
         - uselocal (bool): whether to use local inputs
         '''
-        haskernel = hasattr(self.model,'intkernel')
+        haskernel = hasattr(self.model,'kernel')
         trainsamples = len(self.trainloader.dataset)
         validsamples = len(self.validloader.dataset)
         logger.info(f'   Training samples: {trainsamples}, Validation samples: {validsamples}')

@@ -50,14 +50,14 @@ class PredictionWriter:
             return arr,meta
         raise ValueError(f'Unknown kind `{kind}`')
 
-    def to_dataset(self,arr,meta,*,refda=None,refds=None,components=None,seedaxis=False):
+    def to_dataset(self,arr,meta,*,refda=None,refds=None,seedaxis=False):
         '''
-        Purpose: Wrap a NumPy array of predictions or weights into xr.Dataset with metadata.
+        Purpose: Wrap a NumPy array of predictions or list of component arrays into xr.Dataset with metadata.
         Args:
-        - arr (np.ndarray): shaped dense array from to_array()
+        - arr (np.ndarray | list[np.ndarray]): for predictions, shaped dense array from to_array(); for weights, list of component arrays
         - meta (dict[str,object]): metadata returned by to_array()
         - refda (xr.DataArray | None): reference DataArray for coords or None
-        - components (np.ndarray | None): component weights for mixture kernels or None
+        - refds (xr.Dataset | None): reference Dataset for kernel dimension coords or None
         - seedaxis (bool): whether arr has seed dimension as last axis (defaults to False)
         Returns:
         - xr.Dataset: Dataset ready to save
@@ -79,21 +79,15 @@ class PredictionWriter:
                 elif refds is not None and dim in refds.data_vars:
                     coords[dim] = refds[dim].values
                 else:
-                    coords[dim] = np.arange(arr.shape[ax])
+                    coords[dim] = np.arange(arr[0].shape[ax])
             if seedaxis:
                 dims = dims+('seed',)
-                coords['seed'] = np.arange(arr.shape[-1])
+                coords['seed'] = np.arange(arr[0].shape[-1])
             longname = 'Nonparametric kernel weights' if meta.get('nonparam',False) else 'Parametric kernel weights'
             ds = xr.Dataset()
-            if components is not None:
-                indexer = tuple(slice(None) if dim=='field' or dim in meta['kerneldims'] else 0 for dim in ['field','lat','lon','lev','time'])
-                for i in range(components.shape[0]):
-                    comp = components[i][indexer][:len(self.fieldvars)]
-                    ds[f'k{i+1}'] = xr.DataArray(comp,dims=dims,coords=coords)
-                    ds[f'k{i+1}'].attrs = dict(long_name=f'{longname} (component {i+1})',units='N/A')
-            else:
-                ds['k'] = xr.DataArray(arr,dims=dims,coords=coords)
-                ds['k'].attrs = dict(long_name=longname,units='N/A')
+            for i,component in enumerate(arr):
+                ds[f'k{i+1}'] = xr.DataArray(component,dims=dims,coords=coords)
+                ds[f'k{i+1}'].attrs = dict(long_name=f'{longname} (component {i+1})',units='N/A')
             return ds
         raise ValueError(f'Unknown kind `{meta.get("kind")}` in meta')
 

@@ -110,7 +110,6 @@ if __name__=='__main__':
         centers = result['centers'][split]
         refda = splitdata[split]['refda']
         allpreds = []
-        allweights = []
         allcomponents = []
         for seedidx,seed in enumerate(seeds):
             logger.info(f'   Seed {seedidx+1}/{len(seeds)}: {seed}')
@@ -123,11 +122,12 @@ if __name__=='__main__':
             arr,meta = writer.to_array(preds,'predictions',centers=centers,refda=refda)
             allpreds.append(arr)
             if haskernel:
-                weights,components = inferencer.extract_weights(nonparam)
-                warr,wmeta = writer.to_array(weights,'weights',kerneldims=kerneldims,nonparam=nonparam)
-                allweights.append(warr)
-                if components is not None:
-                    allcomponents.append(components)
+                components = inferencer.extract_weights(nonparam)
+                seedcomps = []
+                for comp in components:
+                    warr,wmeta = writer.to_array(comp,'weights',kerneldims=kerneldims,nonparam=nonparam)
+                    seedcomps.append(warr)
+                allcomponents.append(seedcomps)
             del model,inferencer
         else:
             logger.info('   Combining results from all seeds...')
@@ -137,10 +137,10 @@ if __name__=='__main__':
             writer.save(name,ds,'predictions',split,config.predsdir)
             del predsstack,ds
             if haskernel:
-                weightsstack = np.stack(allweights,axis=-1)
-                componentstack = np.stack(allcomponents,axis=-1) if allcomponents else None
+                ncomps = len(allcomponents[0])
+                stacked = [np.stack([s[i] for s in allcomponents],axis=-1) for i in range(ncomps)]
                 logger.info('   Formatting/saving normalized kernel weights...')
                 refds = xr.open_dataset(os.path.join(config.splitsdir,'valid.h5'),engine='h5netcdf')
-                ds = writer.to_dataset(weightsstack,wmeta,refds=refds,components=componentstack,seedaxis=True)
+                ds = writer.to_dataset(stacked,wmeta,refds=refds,seedaxis=True)
                 writer.save(name,ds,'weights',split,config.weightsdir)
-                del weightsstack,componentstack,ds
+                del stacked,ds
