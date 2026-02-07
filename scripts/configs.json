@@ -4,7 +4,6 @@
     "interim":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/interim", 
     "splits":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/splits",
     "predictions":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/predictions",
-    "features":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/features",
     "weights":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/data/weights",
     "models":"/global/cfs/cdirs/m4334/sferrett/monsoon-kernels/models"
   },
