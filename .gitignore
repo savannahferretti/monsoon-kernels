@@ -9,7 +9,6 @@ data/weights/*
 !data/interim/.gitkeep
 !data/splits/.gitkeep
 !data/predictions/.gitkeep
-!data/features/.gitkeep
 !data/weights/.gitkeep
 
 # Ignore specific folder types
