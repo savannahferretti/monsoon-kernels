@@ -14,7 +14,6 @@ data/weights/*
 # Ignore specific folder types
 **/.ipynb_checkpoints/ 
 **/__pycache__/ 
-**/deprecated/
 **/wandb/
 
 # Ignore specific file types
@@ -26,4 +25,3 @@ data/weights/*
 *.npz
 *.pyc
 *.log
-logs/*.log
