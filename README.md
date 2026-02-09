@@ -69,6 +69,10 @@ Next, create the Conda environment that reproduces the software dependencies use
 conda env create -f environment.yml
 conda activate monsoon-kernels
 ```
+Before running any scripts in this repository, you must edit `scripts/configs.json` to set the `filepaths` entries to locations that exist on your system. At minimum, update the directories for `raw`, `interim`, `splits`, `predictions`, `weights`, and `models`. Once these paths are set, all subsequent scripts will write outputs to the specified locations.
+
+After updating `filepaths`, users can optionally customize other parts of `scripts/configs.json` for their own application, including the spatial/temporal domain in `domain`, the year ranges in `splits`, the chosen predictors and target in `variables`, training hyperparameters in `training`, and the set of model variants in `models`. Model names used with `--models` must match the corresponding `name` fields in the `models` list.
+
 The full data preparation pipeline consists of three sequential commands:
 ```
 python -m scripts.data.download
