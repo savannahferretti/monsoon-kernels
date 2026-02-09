@@ -54,8 +54,47 @@ Project Organization
 └── environment.yml  <- File for reproducing the analysis environment
 ```
 
+How to Use this Repository
+------------
+
+All commands below should be executed from the top-level `monsoon-kernels/` directory after cloning the repository locally.
+
+First, [clone the repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) to your local machine and navigate into the project directory:
+```
+git clone https://github.com/savannahferretti/monsoon-kernels.git
+cd monsoon-kernels
+```
+Next, create the Conda environment that reproduces the software dependencies used in this code base and activate it:
+```
+conda env create -f environment.yml
+conda activate monsoon-kernels
+```
+The full data preparation pipeline consists of three sequential commands:
+```
+python -m scripts.data.download
+python -m scripts.data.calculate
+python -m scripts.data.split
+```
+These steps download the ERA5 and IMERG V06 datasets into `data/raw/`, compute derived predictor and target variables stored in `data/interim/`, and generate the training, validation, and test splits written to `data/splits/`.
+
+Model training and evaluation are controlled through the execution scripts in `scripts/models/`. By default, the training and evaluation commands operate on all models defined in the configuration file (`scripts/configs.json`):
+```
+python -m scripts.models.train
+python -m scripts.models.evaluate --split valid  # or --split test
+```
+To run a single model, provide its name as defined in the configuration:
+```
+python -m scripts.models.train --models baseline_local
+python -m scripts.models.evaluate --models baseline_local --split valid
+```
+Multiple models can be trained and evaluated together by listing their names:
+```
+python -m scripts.models.train --models baseline_local,baseline_nonlocal
+python -m scripts.models.evaluate --models baseline_local,baseline_nonlocal --split valid
+```
+
 Acknowledgements
--------
+---------
 The analysis for this work was performed on NERSC’s [Perlmutter](https://docs.nersc.gov/systems/perlmutter/architecture/). This research was supported by [LEAP NSF-STC](https://leap.columbia.edu/); the US DOE, including the [ASCR](https://www.energy.gov/science/ascr/advanced-scientific-computing-research) Program, the [BER](https://www.energy.gov/science/ber/biological-and-environmental-research) Program Office, and the [PCMDI](https://eesm.science.energy.gov/projects/pcmdi-earth-system-model-evaluation-project) Earth System Model Evaluation Project; [NVIDIA](https://www.nvidia.com/en-us/); NASA’s [NIP-ES](https://science.nasa.gov/earth-science/early-career-opportunities/#h-early-career-investigator-program-in-earth-science); and the Horizon Europe [AI4PEX Project](https://ai4pex.org/) through [SERI](https://www.sbfi.admin.ch/en). Additionally, we thank Fiaz Ahmed and Eric Wengrowski for their input during the early stages of this work, and Jared Sexton for helpful comments on the manuscript prior to submission.
 
 --------
