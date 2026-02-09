@@ -29,7 +29,7 @@
     "target":"pr"
   },
   "training":{
-    "projectname":"Data-Driven Integration Kernel Experiments",
+    "projectname":"Chapter-2-Experiments",
     "seeds":[42,72,102],
     "workers":8,
     "epochs":20,
