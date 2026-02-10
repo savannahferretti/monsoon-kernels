@@ -15,45 +15,6 @@ Savannah L. Ferretti<sup>1</sup>, Jerry Lin<sup>2</sup>, Sara Shamekh<sup>3</sup
 
 **Abstract**: Machine learning models can represent climate processes that are nonlocal in horizontal space, height, and time, often by combining information across these dimensions in highly nonlinear ways. While this can improve predictive skill, it makes learned relationships difficult to interpret and prone to overfitting as the extent of nonlocal information grows. We address this challenge by introducing data-driven integration kernels, a framework that adds structure to nonlocal operator learning by explicitly separating nonlocal information aggregation from local nonlinear prediction. Each spatiotemporal predictor field is first integrated using learnable kernels (defined as continuous weighting functions over horizontal space, height, and/or time), after which a local nonlinear mapping is applied only to the resulting kernel-integrated features and any optional local inputs. This design confines nonlinear interactions to a small set of integrated features and makes each kernel directly interpretable as a weighting pattern that reveals which horizontal locations, vertical levels, and past timesteps contribute most to the prediction. We demonstrate the framework for South Asian monsoon precipitation using a hierarchy of neural network models with increasing structure, including baseline, nonparametric kernel, and parametric kernel models. Across this hierarchy, kernel-based models achieve near-baseline performance with far fewer trainable parameters, showing that much of the relevant nonlocal information can be captured through a small set of interpretable integrations when appropriate structural constraints are imposed.
 
-Project Organization
-------------
-```
-├── LICENSE.md  <- License for code
-│
-├── README.md   <- Top-level information on this code base/manuscript
-│
-├── data/
-│   ├── raw/          <- Original ERA5 and IMERG V06 data
-│   ├── interim/      <- Intermediate data that has been transformed
-│   ├── splits/       <- Training, validation, and test sets
-│   ├── predictions/  <- Model predictions
-│   └── weights/      <- Learned kernel weights
-│
-├── figs/       <- Generated figures/graphics
-│
-├── models/     <- Saved baseline NNs, nonparametric kernel NNs, and parametric kernel NNs
-│
-├── notebooks/  <- Jupyter notebooks for data analysis and visualizations
-│
-├── scripts/
-│   ├── data/
-│   │   ├── classes/      <- Data processing classes
-│   │   ├── download.py   <- Execution script for downloading raw data
-│   │   ├── calculate.py  <- Execution script for calculating derived variables
-│   │   └── split.py      <- Execution script for creating train/valid/test splits
-│   │
-│   ├── models/
-│   │   ├── classes/          <- Model building, training, and inferencing classes
-│   │   ├── architectures.py  <- NN architectures
-│   │   ├── kernels.py        <- Kernel layers
-│   │   ├── train.py          <- Execution script for training models
-│   │   └── evaluate.py       <- Execution script for model evaluation
-│   │
-│   └── utils.py     <- Configuration and utility functions
-│
-└── environment.yml  <- File for reproducing the analysis environment
-```
-
 How to Use this Repository
 ------------
 
@@ -95,6 +56,45 @@ Multiple models can be trained and evaluated together by listing their names:
 ```
 python -m scripts.models.train --models baseline_local,baseline_nonlocal
 python -m scripts.models.evaluate --models baseline_local,baseline_nonlocal --split valid
+```
+
+Project Organization
+------------
+```
+├── LICENSE.md  <- License for code
+│
+├── README.md   <- Top-level information on this code base/manuscript
+│
+├── data/
+│   ├── raw/          <- Original ERA5 and IMERG V06 data
+│   ├── interim/      <- Intermediate data that has been transformed
+│   ├── splits/       <- Training, validation, and test sets
+│   ├── predictions/  <- Model predictions
+│   └── weights/      <- Learned kernel weights
+│
+├── figs/       <- Generated figures/graphics
+│
+├── models/     <- Saved baseline NNs, nonparametric kernel NNs, and parametric kernel NNs
+│
+├── notebooks/  <- Jupyter notebooks for data analysis and visualizations
+│
+├── scripts/
+│   ├── data/
+│   │   ├── classes/      <- Data processing classes
+│   │   ├── download.py   <- Execution script for downloading raw data
+│   │   ├── calculate.py  <- Execution script for calculating derived variables
+│   │   └── split.py      <- Execution script for creating train/valid/test splits
+│   │
+│   ├── models/
+│   │   ├── classes/          <- Model building, training, and inferencing classes
+│   │   ├── architectures.py  <- NN architectures
+│   │   ├── kernels.py        <- Kernel layers
+│   │   ├── train.py          <- Execution script for training models
+│   │   └── evaluate.py       <- Execution script for model evaluation
+│   │
+│   └── utils.py     <- Configuration and utility functions
+│
+└── environment.yml  <- File for reproducing the analysis environment
 ```
 
 Acknowledgements
