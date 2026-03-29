@@ -6,17 +6,16 @@ dependencies:
   - adlfs
   - basemap
   - bottleneck
-  - cartopy
   - dask
   - fsspec
   - gcsfs
-  - h5py
   - h5netcdf
+  - h5py
   - ipykernel
   - matplotlib
   - netcdf4
-  - numba
   - numpy
+  - pandas
   - planetary-computer
   - proplot
   - pystac-client
