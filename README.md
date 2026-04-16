@@ -6,7 +6,7 @@ Data-Driven Integration Kernels for the Interpretable Machine Learning of Nonloc
 This repository contains the code used to reproduce the analyses in Ferretti et al. (under review in *Environmental Data Science*). The final version will be archived on Zenodo upon acceptance. For questions or feedback, contact Savannah Ferretti (savannah.ferretti@uci.edu).
 
 **Authors & Affiliations:**  
-Savannah L. Ferretti<sup>1</sup>, Jerry Lin<sup>2</sup>, Sara Shamekh<sup>3</sup>, Jane W. Baldwin<sup>1,4</sup>, Michael S. Pritchard<sup>5</sup>, & Tom Beucler<sup>6</sup>  
+Savannah Ferretti<sup>1</sup>, Jerry Lin<sup>2</sup>, Sara Shamekh<sup>3</sup>, Jane Baldwin<sup>1,4</sup>, Mike Pritchard<sup>5</sup>, & Tom Beucler<sup>6</sup>  
 <sup>1</sup>University of California Irvine, Irvine, CA, United States  
 <sup>2</sup>Boston University, Boston, MA, United States  
 <sup>3</sup>New York University, New York, NY, United States  
