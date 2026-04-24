@@ -6,6 +6,7 @@ dependencies:
   - adlfs
   - basemap
   - bottleneck
+  - cartopy
   - dask
   - fsspec
   - gcsfs
