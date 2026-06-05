@@ -2,8 +2,9 @@ Data-Driven Integration Kernels for the Interpretable Machine Learning of Nonloc
 ------------
 
 [![Preprint](https://img.shields.io/badge/Preprint-arXiv%3A2603.10305-1f6feb?style=for-the-badge&logo=arxiv&logoColor=white)](https://arxiv.org/abs/2603.10305)
+[![Archived Code](https://img.shields.io/badge/Archived%20Code-10.5281%2Fzenodo.19005467-1f6feb?style=for-the-badge&logo=github&logoColor=white)](https://doi.org/10.5281/zenodo.19005467)
 
-This repository contains the code used to reproduce the analyses in Ferretti et al. (under review in *Environmental Data Science*). The final version will be archived on Zenodo upon acceptance. For questions or feedback, contact Savannah Ferretti (savannah.ferretti@uci.edu).
+This repository contains the code used to reproduce the analyses in Ferretti et al. (2026, *Environmental Data Science*). The exact version used in the paper is archived on Zenodo. For questions or feedback, contact Savannah Ferretti (savannahleeferretti@outlook.com).
 
 **Authors & Affiliations:**  
 Savannah Ferretti<sup>1</sup>, Jerry Lin<sup>2</sup>, Sara Shamekh<sup>3</sup>, Jane Baldwin<sup>1,4</sup>, Mike Pritchard<sup>5</sup>, & Tom Beucler<sup>6</sup>  
