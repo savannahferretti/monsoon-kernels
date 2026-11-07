@@ -28,7 +28,7 @@ conda env create -f environment.yml
 conda activate monsoon-kernels
 ```
 
-Before running any code, edit `scripts/configs.json` to set valid local paths for filepaths (at minimum, `raw`, `interim`, `splits`, `predictions`, `weights`, and `models`). All outputs will be written to these locations. After updating `filepaths`, users can optionally customize other configuration settings, including the spatial/temporal domain in `domain`, the year ranges in `splits`, the chosen predictors and target in `variables`, training hyperparameters in `training`, and the set of model variants in `models`. Model names passed via `--models` must match the name fields in the configuration.
+Before running any code, edit `scripts/configs.json` to set valid local paths for `filepaths` (`raw`, `interim`, `splits`, `predictions`, `weights`, and `models`). All outputs will be written to these locations. Users should also update `metadata` (author and email for output files), and can optionally customize the spatial/temporal domain in `domain`, the year ranges in `splits`, the chosen predictors and target in `variables`, training hyperparameters and seeds in `training`, and the set of model variants in `models`. Model names passed via `--models` must match the `name` fields in the configuration.
 
 Now, download the ERA5 and IMERG V06 datasets into `data/raw/`, compute derived predictor and target variables stored in `data/interim/`, and generate the training, validation, and test splits written to `data/splits/`:
 ```
