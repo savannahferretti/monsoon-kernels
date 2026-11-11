@@ -1,7 +1,7 @@
 Data-Driven Integration Kernels for Interpretable Nonlocal Operator Learning
 ------------
 
-This repository contains the code used to reproduce the analyses in [Ferretti et al. (2026, *Environmental Data Science*)](https://doi.org/10.1017/eds.2026.10056). The exact version used in the paper is [archived on Zenodo](https://doi.org/10.5281/zenodo.20562314). For questions or feedback, contact Savannah Ferretti (savannah.ferretti@asu.edu).
+This repository contains the code used to reproduce the analyses in [Ferretti et al. (2026, *Environmental Data Science*)](https://doi.org/10.1017/eds.2026.10056). The version of the code used to produce the paper results is [archived on Zenodo](https://doi.org/10.5281/zenodo.20562314). For questions or feedback, contact Savannah Ferretti (savannah.ferretti@asu.edu).
 
 **Authors & Affiliations:**  
 Savannah Ferretti<sup>1</sup>, Jerry Lin<sup>2</sup>, Sara Shamekh<sup>3</sup>, Jane Baldwin<sup>1,4</sup>, Mike Pritchard<sup>5</sup>, & Tom Beucler<sup>6</sup>  
